@@ -23,6 +23,12 @@ synthesised acoustic guitar. No accounts, no server, no data leaves the device.
   participles, multi-word phrases, and typos, and every result explains why it
   feels the way it does and can be previewed without disturbing what you are
   already working on.
+- **More like this** — the mood search can also work from whatever is already
+  on screen. It reads the progression's character out of its own harmony (minor
+  tonic, sevenths, power chords, suspensions, borrowed chords), its tempo and
+  its strumming pattern, then offers neighbours — or nudges: darker, jazzier,
+  calmer, heavier, weirder, dreamier and so on. Typing "more like this, but
+  sadder" does the same thing.
 - **Key awareness** — pick a key and the seven diatonic chords appear as
   one-tap buttons. Every bar is labelled with its roman numeral, so the shape of
   the progression is readable at a glance.
@@ -56,6 +62,15 @@ at `https://adamwood999-lab.github.io/claudenew/` within a minute or two, and
 updates on every push.
 
 ## Notes on the music
+
+Relative search is deliberately not pure mood matching. A bright progression
+shares no mood tags at all with a dark one, so asking for "the same thing but
+darker" in tag space alone collapses to whichever progression is most darkly
+tagged — a two-chord drone rather than a relative of the four chords you were
+playing. Results are therefore held near the original by shape as well: bar
+count, the mix of chord types, and the intervals the roots move by. Asking
+I–V–vi–IV to get sadder returns i–VI–III–VII, which is what a musician would
+have reached for.
 
 Every one of the 57 mood tags is used by at least one progression and all 1,304
 searchable terms resolve to at least one result, so no keyword is a dead end.
