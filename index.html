@@ -124,8 +124,8 @@ select{
 
 .tabs{display:flex;gap:4px;background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:3px;margin:0 0 14px}
 .tabs button{
-  flex:1;background:transparent;border:0;border-radius:7px;padding:8px 4px;cursor:pointer;
-  font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);
+  flex:1;background:transparent;border:0;border-radius:7px;padding:8px 2px;cursor:pointer;
+  font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink2);
 }
 .tabs button[aria-selected="true"]{background:var(--panel);color:var(--ink);box-shadow:var(--shadow)}
 
@@ -218,6 +218,25 @@ input[type=text]{
 }
 .tg[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 
+/* ---------- mood results ---------- */
+.reslist{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.res{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:7px}
+.res-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.res-name{font-family:var(--f-disp);font-variation-settings:"wdth" 112,"wght" 700;font-size:18px;line-height:1.1}
+.res-mode{font-family:var(--f-mono);font-size:10px;color:var(--ink3);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.res-bars{display:flex;flex-wrap:wrap;gap:4px}
+.res-bar{min-width:54px;padding:4px 7px;background:var(--sunk);border:1px solid var(--line);border-radius:6px;text-align:center}
+.res-bar b{display:block;font-family:var(--f-disp);font-variation-settings:"wdth" 110,"wght" 700;font-size:15px;line-height:1.15}
+.res-bar span{font-family:var(--f-mono);font-size:9px;color:var(--ink3);letter-spacing:.03em}
+.res-note{font-size:13px;line-height:1.5;color:var(--ink2);margin:0;max-width:62ch}
+.res-why{display:flex;gap:4px;flex-wrap:wrap}
+.tagchip{font-family:var(--f-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;background:var(--accent-soft);border:1px solid var(--line);border-radius:20px;padding:3px 8px;color:var(--accent)}
+.res-acts{display:flex;gap:6px;margin-top:1px}
+.browse{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+.browse summary{font-family:var(--f-mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink3);cursor:pointer;padding:2px 0}
+.browse .chips{margin-top:10px}
+.browse .chip{font-size:12px;padding:5px 8px}
+
 @media (prefers-reduced-motion:no-preference){
   .bar,.chip,.slot,.btn,.tg{transition:background-color .12s ease,border-color .12s ease,color .12s ease,box-shadow .12s ease}
 }
@@ -265,10 +284,26 @@ input[type=text]{
   </section>
 
   <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" id="tab-mood" aria-selected="false" aria-controls="p-mood">Mood</button>
     <button role="tab" id="tab-chords" aria-selected="true" aria-controls="p-chords">Chords</button>
     <button role="tab" id="tab-strum" aria-selected="false" aria-controls="p-strum">Strum</button>
     <button role="tab" id="tab-songs" aria-selected="false" aria-controls="p-songs">Songs</button>
   </nav>
+
+  <section class="panel" id="p-mood" role="tabpanel" aria-labelledby="tab-mood" hidden>
+    <p class="lab">Describe how it should feel</p>
+    <div class="row">
+      <input type="text" id="moodQ" placeholder="melancholic, rainy night, epic boss fight&hellip;" maxlength="80" autocomplete="off">
+      <button class="btn primary" id="moodGo">Find</button>
+    </div>
+    <div class="chips" id="moodQuick" style="margin-top:8px"></div>
+    <div class="row"><button class="btn ghost" id="moodLucky">Surprise me</button></div>
+    <div id="moodResults" class="reslist"></div>
+    <details class="browse">
+      <summary>Browse every mood</summary>
+      <div class="chips" id="allMoods"></div>
+    </details>
+  </section>
 
   <section class="panel" id="p-chords" role="tabpanel" aria-labelledby="tab-chords">
     <p class="lab">In the key of <span id="keyName">C major</span></p>
@@ -541,6 +576,439 @@ function diagram(v, w){
   return svg.join("");
 }
 
+/* ============================ mood vocabulary ============================ */
+var MOOD_TAGS = [
+  "melancholy","sad","bittersweet","wistful","nostalgic","longing","lonely","weary",
+  "dark","ominous","tense","eerie","mysterious","angry","aggressive","defiant","gritty",
+  "epic","triumphant","heroic","cinematic","dramatic",
+  "uplifting","hopeful","joyful","sunny","warm","tender","romantic","sweet","innocent","playful","quirky",
+  "chilled","dreamy","floating","hypnotic","peaceful","sparse","lush",
+  "sacred","jazzy","sophisticated","bluesy","soulful","groovy",
+  "driving","energetic","urgent","folky","rustic","exotic","retro","futuristic","sensual",
+  "unresolved","resolved"
+];
+
+/* every entry: a run of synonyms (multi-word terms joined by +), and the tags they imply */
+var VOCAB = [
+["sad unhappy down blue low sorrow sorrowful sombre somber miserable gloom glum morose dejected downcast forlorn despondent doleful woeful mournful bummed",{sad:3,melancholy:3}],
+["melancholy melancholic melancholia pensive rueful mopey moody brooding wallowing",{melancholy:3,wistful:2}],
+["heartbreak heartbroken heartbreaking heartache breakup break+up devastated crushed grief grieving mourning loss bereaved",{sad:3,melancholy:2,longing:2}],
+["crying tears weeping tearful sobbing weep cry",{sad:3,melancholy:2,tender:1}],
+["depressed depressing despair hopeless bleak desolate dismal grim despairing",{sad:3,dark:2,lonely:2}],
+["lonely loneliness alone isolated isolation solitude solitary abandoned deserted empty hollow forsaken",{lonely:3,sparse:2,melancholy:2}],
+["longing yearning pining aching ache craving wanting missing homesick unrequited desperate+for",{longing:3,wistful:2,melancholy:1}],
+["nostalgia nostalgic reminiscing memories memory remembering childhood bygone yesteryear looking+back the+past",{nostalgic:3,wistful:2}],
+["wistful bittersweet poignant touching moving affecting rueful+smile",{bittersweet:3,wistful:3}],
+["regret regretful remorse remorseful sorry apology guilt guilty shame ashamed",{melancholy:2,weary:2,unresolved:2}],
+["weary tired exhausted worn drained jaded resigned resignation defeated giving+up burnt+out spent",{weary:3,melancholy:2}],
+["goodbye farewell parting leaving departure ending finale closure last+time moving+on",{bittersweet:3,melancholy:2,resolved:1}],
+["happy happiness joy joyful joyous glad cheerful cheery merry gleeful elated delighted beaming",{joyful:3,uplifting:2,sunny:2}],
+["uplifting upbeat positive optimistic encouraging inspiring inspirational motivating motivational rousing",{uplifting:3,hopeful:3}],
+["hopeful hope promise silver+lining better+days looking+up new+beginning fresh+start",{hopeful:3,uplifting:2}],
+["sunny sunshine bright brightness daylight golden radiant beaming+sun",{sunny:3,warm:2,joyful:1}],
+["fun playful lighthearted light+hearted carefree breezy bouncy jaunty perky skippy chirpy",{playful:3,joyful:2,sunny:1}],
+["celebration celebrate party festive victory victorious winning champion champions",{triumphant:3,joyful:2,energetic:2}],
+["love romantic romance sweetheart valentine crush infatuation devotion adoring smitten",{romantic:3,tender:2,sweet:2}],
+["tender gentle soft sweet delicate affectionate caring loving warmhearted",{tender:3,sweet:2,warm:2}],
+["innocent naive childlike pure wholesome sincere earnest guileless",{innocent:3,sweet:2,tender:1}],
+["calm calming chill chilled relaxed relaxing laid+back mellow easygoing easy+going unhurried",{chilled:3,peaceful:2}],
+["peaceful peace serene serenity tranquil still stillness quiet restful soothing gentle+quiet",{peaceful:3,chilled:2,sparse:1}],
+["dreamy dreamlike dream floaty floating weightless airy hazy misty drifting woozy",{dreamy:3,floating:3}],
+["ethereal heavenly celestial otherworldly angelic transcendent sublime",{floating:3,sacred:2,dreamy:2}],
+["ambient atmospheric wash pad drone soundscape texture background+music",{floating:3,sparse:2,hypnotic:2}],
+["meditative meditation zen mindful contemplative reflective introspective thoughtful",{peaceful:3,hypnotic:2,sparse:1}],
+["cosy cozy comfort comforting homely snug fireside blanket safe",{warm:3,peaceful:2,tender:1}],
+["sleepy drowsy lullaby bedtime nap slumber dozing sleep",{tender:3,peaceful:3,innocent:2}],
+["hypnotic trance repetitive looping circular mantra droning mesmerising mesmerizing",{hypnotic:3,floating:1}],
+["dark darkness gloomy shadowy shadows black pitch+black",{dark:3,ominous:1}],
+["ominous foreboding menacing threatening looming dread impending doomy",{ominous:3,dark:2,tense:2}],
+["creepy spooky eerie unsettling unnerving uncanny haunting haunted ghostly ghost",{eerie:3,mysterious:2,ominous:2}],
+["horror scary frightening terrifying nightmare fear afraid panic terror",{eerie:3,tense:3,ominous:2}],
+["tense tension suspense suspenseful anxious anxiety nervous edgy uneasy on+edge stressed",{tense:3,unresolved:2}],
+["sinister evil villain villainous wicked malevolent cruel nefarious",{ominous:3,dark:3,eerie:1}],
+["mysterious mystery enigmatic cryptic secretive intrigue puzzling curious inquisitive",{mysterious:3,floating:1}],
+["angry anger rage furious fury mad irate hostile bitter resentful seething",{angry:3,aggressive:3}],
+["aggressive violent brutal savage fierce ferocious harsh vicious",{aggressive:3,gritty:2}],
+["heavy hard crushing pounding thunderous massive weighty huge",{aggressive:2,dark:2,epic:2}],
+["defiant rebellious rebel protest resistance uprising revolt fight+back standing+up",{defiant:3,aggressive:2,driving:2}],
+["angsty angst teenage frustration frustrated restless pent+up",{defiant:2,gritty:2,tense:2}],
+["energetic energy lively vibrant spirited vigorous bouncing bursting",{energetic:3}],
+["fast quick rapid speedy racing sprint hurry rushing frantic frenetic hectic",{urgent:3,energetic:3}],
+["driving drive propulsive relentless insistent chugging momentum motorik",{driving:3,energetic:2}],
+["urgent urgency pressing critical countdown deadline chase pursuit running",{urgent:3,tense:2,driving:2}],
+["slow slowly languid dragging sluggish crawling",{sparse:2,peaceful:2,melancholy:1}],
+["groovy groove funky pocket swagger strut",{groovy:3,sensual:1}],
+["danceable dance dancing club dancefloor boogie",{groovy:3,energetic:3}],
+["powerful power strong bold mighty commanding imposing",{epic:2,triumphant:2,heroic:2}],
+["epic grand grandiose sweeping monumental colossal vast immense",{epic:3,cinematic:2}],
+["cinematic film movie soundtrack score trailer montage credits opening+titles",{cinematic:3,dramatic:2}],
+["heroic hero heroism brave bravery courage courageous valiant noble gallant knight",{heroic:3,triumphant:2,epic:2}],
+["dramatic drama theatrical intense climax climactic showdown confrontation",{dramatic:3,tense:2}],
+["adventure quest journey expedition voyage exploring discovery setting+out",{epic:2,heroic:2,uplifting:2}],
+["battle war fight combat boss+fight duel siege",{aggressive:2,urgent:3,epic:2}],
+["triumph triumphant glory glorious conquering",{triumphant:3,uplifting:2,heroic:2}],
+["sacred holy church hymn choir spiritual prayer worship divine reverent",{sacred:3,peaceful:1}],
+["funeral elegy requiem lament mourning+song memorial eulogy",{sad:3,sacred:2,melancholy:3}],
+["wedding vows ceremony processional first+dance",{romantic:3,sacred:2,tender:2}],
+["jazz jazzy bebop swing standards improvisation",{jazzy:3,sophisticated:2}],
+["blues bluesy delta twelve+bar 12+bar blue+notes",{bluesy:3,gritty:1}],
+["soul soulful motown stax rnb rhythm+and+blues",{soulful:3,groovy:2}],
+["gospel praise choir+music gospel+church",{sacred:3,soulful:3,uplifting:2}],
+["folk folky acoustic singer+songwriter troubadour busking traditional",{folky:3,rustic:2,warm:1}],
+["country western nashville honky+tonk bluegrass americana",{rustic:3,folky:2,warm:2}],
+["rock rocking classic+rock arena stadium riff riffy",{driving:3,energetic:2,gritty:1}],
+["punk hardcore garage thrashy",{aggressive:3,energetic:3,defiant:3}],
+["metal heavy+metal thrash doom sludge",{aggressive:3,dark:3,gritty:2}],
+["grunge alternative alt+rock nineties 90s",{gritty:3,defiant:2,melancholy:1}],
+["indie bedroom lo+fi lofi",{chilled:2,wistful:2,gritty:1}],
+["emo screamo pop+punk",{longing:2,defiant:2,energetic:2}],
+["shoegaze dream+pop dreampop wall+of+sound reverby",{dreamy:3,lush:3,floating:2}],
+["pop radio chart mainstream catchy",{uplifting:2,joyful:2}],
+["ballad power+ballad slow+jam torch+song",{romantic:2,dramatic:2,tender:2}],
+["funk clavinet wah",{groovy:3,energetic:2}],
+["disco seventies 70s dancefloor+strings",{groovy:3,retro:3,joyful:2}],
+["house techno edm electronic rave",{driving:3,hypnotic:2,energetic:3}],
+["synthwave retrowave outrun vaporwave eighties 80s neon",{retro:3,futuristic:2,driving:2}],
+["hip+hop rap boom+bap trap drill",{groovy:2,dark:2,sparse:2}],
+["reggae ska dub rocksteady skank island caribbean",{chilled:3,sunny:2,groovy:2}],
+["latin bossa bossa+nova bossanova samba salsa brazilian",{sophisticated:2,warm:2,sensual:2}],
+["tango argentine milonga",{dramatic:3,sensual:3,exotic:2}],
+["flamenco spanish andalusian",{exotic:3,dramatic:3}],
+["celtic irish scottish gaelic jig reel",{folky:3,rustic:2,wistful:2}],
+["klezmer balkan eastern+european gypsy+jazz",{exotic:3,playful:2,dramatic:1}],
+["classical baroque bach chamber orchestral symphony",{sophisticated:3,cinematic:2,sacred:1}],
+["jpop j+pop kpop k+pop anime idol",{bittersweet:2,uplifting:2,dramatic:2}],
+["city+pop citypop japanese showa",{retro:3,sophisticated:2,warm:2}],
+["math+rock post+rock progressive prog",{quirky:2,sophisticated:2,cinematic:2}],
+["surf sixties 60s twang",{retro:3,energetic:2}],
+["doo+wop doowop fifties 50s sock+hop",{retro:3,innocent:3,sweet:2}],
+["britpop madchester",{defiant:1,uplifting:2,driving:2}],
+["neo+soul neosoul",{soulful:3,sophisticated:3,sensual:2}],
+["lounge easy+listening cocktail elevator",{sophisticated:3,chilled:2,sensual:1}],
+["sea+shanty shanty sailor nautical maritime pirate",{folky:3,rustic:3,defiant:1}],
+["christmas carol yuletide festive+season",{sweet:2,nostalgic:3,innocent:2,sacred:1}],
+["waltz ballroom viennese three+four",{tender:2,retro:2,romantic:2}],
+["videogame video+game gaming chiptune 8+bit arcade rpg overworld dungeon",{playful:2,epic:2,quirky:2}],
+["noir detective smoky speakeasy cabaret burlesque",{mysterious:3,sensual:2,jazzy:2}],
+["halloween slasher haunted+house",{eerie:3,ominous:3}],
+["cowboy desert+frontier outlaw wild+west",{rustic:2,dramatic:2,exotic:1}],
+["rain rainy raining drizzle storm stormy thunder downpour puddles",{melancholy:3,chilled:2,dreamy:1}],
+["autumn fall october falling+leaves harvest",{wistful:3,nostalgic:2,melancholy:2}],
+["winter cold snow snowy frost frozen ice december chilly",{melancholy:2,sparse:2,peaceful:2}],
+["spring blossom bloom flowers renewal thaw",{hopeful:3,sunny:2,innocent:2}],
+["summer beach ocean sea waves holiday vacation seaside",{sunny:3,chilled:2,warm:2}],
+["sunset dusk twilight golden+hour evening",{wistful:3,warm:2,nostalgic:2}],
+["sunrise dawn morning daybreak new+day",{hopeful:3,peaceful:2,uplifting:2}],
+["night nighttime midnight late+night nocturnal moonlight starlight stars",{mysterious:2,chilled:2,dreamy:2}],
+["space cosmic galaxy astronaut interstellar universe planets orbit",{floating:3,futuristic:2,epic:2}],
+["forest woods trees woodland countryside meadow field nature",{folky:2,peaceful:3,rustic:2}],
+["mountain mountains cliff peak vista horizon valley",{epic:3,cinematic:2,peaceful:1}],
+["city urban streets downtown skyline traffic metropolis",{driving:2,sophisticated:2,futuristic:1}],
+["road+trip highway freeway open+road cruising night+drive",{driving:3,warm:2,nostalgic:2}],
+["train railway platform journey+home",{driving:2,wistful:2,nostalgic:2}],
+["desert dunes sand wasteland arid",{exotic:2,sparse:3,ominous:1}],
+["underwater deep+sea aquatic sinking",{floating:3,mysterious:2,dreamy:2}],
+["cafe coffee bookshop study studying homework working focus concentration",{chilled:3,peaceful:2,sophisticated:1}],
+["campfire bonfire camping stargazing",{folky:3,warm:3,peaceful:2}],
+["church+building cathedral chapel monastery",{sacred:3,peaceful:2}],
+["carnival circus fairground carousel funfair",{quirky:3,playful:3,mysterious:1}],
+["factory machine industrial machinery mechanical clockwork robot robotic",{quirky:2,futuristic:2,driving:2}],
+["future futuristic sci+fi scifi cyberpunk android dystopia dystopian",{futuristic:3,dark:2,driving:1}],
+["medieval renaissance tavern castle fantasy dragons elves",{folky:2,epic:2,rustic:2}],
+["apocalypse post+apocalyptic ruins end+of+the+world aftermath",{ominous:3,sparse:2,dark:2}],
+["simple basic beginner three+chords few+chords easy+chords starter first+song",{folky:3,resolved:2,sunny:1}],
+["complex complicated advanced difficult intricate fancy clever",{sophisticated:3,jazzy:2}],
+["lush rich full layered thick swelling",{lush:3,dreamy:2}],
+["minimal minimalist stripped bare spacious roomy sparse+arrangement",{sparse:3,floating:2}],
+["weird strange odd unusual unconventional experimental avant+garde offbeat",{quirky:3,mysterious:2}],
+["quirky whimsical silly goofy cartoon comic jaunty+odd",{quirky:3,playful:3}],
+["smooth silky slick polished glossy velvet",{sophisticated:3,chilled:2,sensual:2}],
+["gritty raw rough dirty distorted fuzzy grimy scuzzy",{gritty:3,aggressive:1}],
+["sensual sexy sultry seductive smoky+voice steamy intimate",{sensual:3,soulful:1,mysterious:1}],
+["retro vintage old+school throwback oldschool analog analogue classic+sound",{retro:3,nostalgic:2}],
+["modern contemporary current fresh new+sounding",{futuristic:1,uplifting:1}],
+["unresolved unfinished open+ended hanging suspended question questioning ambiguous cliffhanger",{unresolved:3,floating:1}],
+["resolved resolution home landing settled conclusion complete finished",{resolved:3,peaceful:1}],
+["exotic eastern middle+eastern arabic indian moorish moroccan",{exotic:3,mysterious:2}],
+["anthemic anthem singalong sing+along crowd festival stadium+chant",{triumphant:2,uplifting:3,epic:2}],
+["emotional emotive heartfelt raw+emotion feels moving+song",{dramatic:2,bittersweet:2,longing:2}],
+["confident cocky assured bold+statement self+assured",{defiant:2,groovy:2,triumphant:1}],
+["awkward uncomfortable cringe stilted",{tense:2,quirky:2}],
+["overcoming struggle perseverance rising+up comeback redemption",{triumphant:3,heroic:2,hopeful:2}],
+["beautiful pretty lovely gorgeous stunning elegant graceful",{tender:2,lush:2,romantic:1,peaceful:1}],
+["sunday lazy lazy+sunday afternoon slow+day day+off weekend",{chilled:3,peaceful:2,warm:1}],
+["workout gym training exercise pumped hype hyped psyched",{energetic:3,driving:3,triumphant:1}],
+["yoga stretching breathing spa massage",{peaceful:3,floating:2,chilled:2}],
+["background unobtrusive podcast underscore vlog",{sparse:2,chilled:3,peaceful:1}],
+["birthday cheers toast good+news",{joyful:3,playful:2,sweet:1}],
+["cool effortless suave slinky",{chilled:2,groovy:3,sophisticated:2}],
+["chaotic chaos messy unhinged manic scattered",{tense:2,quirky:3,urgent:2}],
+["empowering empowerment strength standing+tall self+belief",{triumphant:3,uplifting:2,heroic:2}],
+["cathartic catharsis release letting+go breakthrough",{dramatic:3,triumphant:2,bittersweet:2}],
+["wanderlust roaming drifting+away far+away escape escaping",{longing:3,epic:2,floating:1}],
+["bored boredom mundane routine ordinary grey",{sparse:2,weary:2}],
+["hungover hangover morning+after regretting",{weary:3,melancholy:1,sparse:1}],
+["commute commuting traffic+jam waiting",{driving:2,weary:1,chilled:1}],
+["storytelling narrative ballad+story tale folklore legend",{folky:3,cinematic:2,rustic:1}],
+["revolution uprising+song riot marching+on",{defiant:3,driving:2,triumphant:1}],
+["freedom free liberation open+sky breaking+out",{uplifting:3,triumphant:2,epic:1}],
+["flying flight soaring gliding weightlessness",{floating:3,epic:2,uplifting:2}],
+["falling slipping+away drifting+off",{melancholy:2,floating:2,dreamy:1}],
+["growth growing+up coming+of+age graduation leaving+home",{bittersweet:3,hopeful:2,nostalgic:2}],
+["psychedelic psych trippy acid kaleidoscope",{dreamy:3,hypnotic:3,quirky:2}],
+["stoner sludgy hazy+riff slow+heavy",{hypnotic:2,gritty:3,dark:2}],
+["dnb drum+and+bass jungle breakbeat",{urgent:3,driving:3,energetic:3}],
+["phonk darkwave witch+house",{dark:3,driving:2,ominous:2}],
+["hyperpop glitch maximalist",{energetic:3,quirky:3,futuristic:2}],
+["opera operatic aria",{dramatic:3,sacred:2,epic:2}],
+["musical broadway showtune west+end",{dramatic:2,playful:2,triumphant:2}],
+["march marching parade military procession",{heroic:3,driving:2,epic:1}],
+["polka oompah bavarian",{playful:3,rustic:2,energetic:2}],
+["bhangra bollywood desi",{energetic:3,exotic:3,joyful:2}],
+["afrobeat highlife soukous",{groovy:3,sunny:3,energetic:2}],
+["cumbia reggaeton tropical",{groovy:3,exotic:2,sunny:2}],
+["chillhop muzak study+beats",{chilled:3,nostalgic:1,sparse:1}],
+["content contentment satisfied at+ease settled+down",{peaceful:3,warm:2}],
+["relief relieved weight+lifted made+it",{resolved:3,peaceful:2,hopeful:1}],
+["gratitude grateful thankful appreciation",{warm:3,tender:2,sacred:1}],
+["pride proud dignity honour honor",{triumphant:3,heroic:2}],
+["jealous jealousy envy resentment spite",{tense:2,dark:2,gritty:1}],
+["obsession obsessive fixation compulsive spiralling spiraling",{hypnotic:3,tense:2,dark:1}],
+["paranoia paranoid watched followed suspicion",{tense:3,eerie:2,mysterious:1}],
+["numb numbness dissociation detached blank floating+away",{sparse:3,floating:3,hypnotic:1}],
+["overwhelmed overwhelming too+much drowning breaking+down",{dramatic:3,tense:3,urgent:1}],
+["vulnerable vulnerability fragile delicate+moment exposed bare+honest",{tender:3,sparse:2,longing:1}],
+["shy timid bashful hesitant unsure",{tender:2,innocent:3,unresolved:1}],
+["flirty flirtatious cheeky teasing coy playful+romance",{playful:3,sensual:2,sweet:1}],
+["swaying swaying+along slow+dance rocking+gently",{tender:2,romantic:2,chilled:2}]
+];
+
+/* ============================ progression library ============================
+   bars are "<semitones above the tonic>:<quality code>", so every progression
+   transposes to whichever key is selected.                                    */
+var QCODE = {M:"maj", m:"min", "7":"7", M7:"maj7", m7:"m7", s2:"sus2", s4:"sus4",
+  a9:"add9", "6":"6", m6:"m6", "9":"9", m9:"m9", M9:"maj9", d:"dim", d7:"dim7",
+  "+":"aug", h:"m7b5", "7s":"7sus4", "5":"5"};
+
+/* name, mode, bars, bpm, strum pattern index, tags, what it does */
+var PROGS = [
+["Rain on the Window","minor","0:m,8:M,3:M,10:M",76,8,{melancholy:3,sad:3,cinematic:2,epic:1,bittersweet:2},"The i–VI–III–VII loop climbs away from the tonic and never quite lands on it, which is why it can circle for four minutes and still ache."],
+["Ashes","minor","0:m,10:M,8:M,10:M",72,8,{melancholy:3,dark:2,lonely:2,hypnotic:2},"Only ever falls and rises by a step. Nothing resolves, so it reads as brooding rather than tragic."],
+["Andalusian Cadence","minor","0:m,10:M,8:M,7:M",96,1,{dramatic:3,exotic:3,dark:2,epic:2},"The flamenco staircase, walking down to a major V that pulls hard back to the top. Old, and still the most dramatic four chords on the instrument."],
+["Elegy","minor","0:m,5:m,10:M,3:M",60,8,{sad:3,weary:2,sacred:1,melancholy:3},"A minor circle of fifths — each chord falls into the next, so it feels like gravity rather than choice."],
+["The Long Winter","minor","0:m,8:M,5:m,7:M",68,8,{melancholy:3,lonely:3,wistful:2,sparse:1},"The major V at the end is the only warmth in it, and it arrives too late to change anything."],
+["Ghost Light","minor","0:m,1:M,0:m,1:M",70,0,{eerie:3,ominous:3,mysterious:3,exotic:2},"A Phrygian half-step above the tonic. That one semitone is the whole trick — it sounds wrong in a way you can't place."],
+["Under the Floorboards","minor","0:m,6:d,0:m,7:M",66,0,{eerie:3,tense:3,ominous:2},"A diminished chord sitting a tritone from home. Maximum unease with minimum movement."],
+["Siege","minor","0:m,8:M,10:M,0:m",132,3,{epic:3,driving:3,heroic:2,cinematic:2},"Rises through VI and VII and slams back onto the tonic. The standard-issue 'the army is coming' loop."],
+["Boss Fight","minor","0:5,1:5,0:5,10:5",150,3,{aggressive:3,tense:3,urgent:3,epic:2,futuristic:1},"Power chords a semitone apart, fast. No thirds, so it reads as threat rather than sadness."],
+["Doom Bell","minor","0:5,8:5",58,0,{dark:3,ominous:3,aggressive:2,sparse:2},"Two chords, very slow, a minor sixth apart. Space does most of the work."],
+["Dirt","minor","0:5,3:5,5:5,3:5",108,3,{gritty:3,angry:2,aggressive:2,defiant:2},"Flat-third power chords — the grunge move. Heavy without being fast."],
+["Three Chords and the Truth","major","0:5,5:5,7:5,5:5",176,0,{aggressive:3,energetic:3,defiant:3,urgent:2},"I–IV–V at double speed with all the thirds stripped out. The entire genre in four bars."],
+["Minor Blues","minor","0:m7,5:m7,0:m7,7:7",84,6,{bluesy:3,soulful:2,gritty:2,weary:2},"A twelve-bar shape squeezed into four, in minor. The major V7 at the end is the bit that hurts."],
+["Wellerman","minor","0:m,3:M,10:M,0:m",112,0,{folky:3,rustic:3,defiant:1,energetic:2},"Modal, sturdy and built for a room full of people who don't know the words yet."],
+["Celtic Air","minor","0:m,10:M,5:m,10:M",88,8,{folky:3,wistful:3,rustic:2,melancholy:2},"Never touches the fifth, so it floats between minor and Dorian — the sound of most traditional laments."],
+["Dorian Vamp","minor","0:m7,5:7",100,5,{groovy:3,jazzy:2,hypnotic:2,chilled:2},"Two chords forever. The major IV against a minor tonic is what makes it cool rather than sad."],
+["After Hours","minor","0:m9,5:m9",84,8,{mysterious:3,sensual:2,jazzy:2,dark:2},"Minor ninths, no resolution, a lot of room. Smoke and a late licence."],
+["Tango","minor","0:m,5:m,7:7,0:m",116,0,{dramatic:3,sensual:3,exotic:2},"Minor tonic, minor iv, then a major dominant that snaps it shut. Formal and a bit dangerous."],
+["Requiem","minor","0:m,5:m,10:M,3:M,8:M,2:d,7:7,0:m",64,8,{sacred:3,sad:3,dramatic:2,cinematic:2},"The full minor circle of fifths, every chord falling into the next until it finally comes home."],
+["Night Drive","minor","0:m,8:M,10:M,5:m",118,3,{retro:3,futuristic:2,driving:3,nostalgic:2},"Synthwave's favourite. Minor, but the pulse makes it feel like motion rather than mourning."],
+["Shadow Beat","minor","0:m,8:M,10:M",140,0,{dark:3,sparse:3,futuristic:2,ominous:1},"Three chords, lots of silence between them. Built for space rather than strumming."],
+["Frontier","minor","0:m,5:m,0:m,7:M",92,0,{rustic:2,dramatic:2,exotic:1,cinematic:2},"Wide, slow and mostly minor, with one major chord riding in at the end."],
+["Hypnotic Two","minor","0:m,10:M",96,0,{hypnotic:3,chilled:2,sparse:2,driving:1},"One step down and back, endlessly. Trance built out of two guitar chords."],
+["Freygish","major","0:M,1:M,0:M,10:m",132,0,{exotic:3,playful:2,dramatic:2},"A major tonic with a flat second above it — the Klezmer and Middle Eastern colour, bright and unsettled at once."],
+["Four Chords","major","0:M,7:M,9:m,5:M",100,2,{uplifting:3,joyful:2,hopeful:3,warm:2},"The one every busker knows. It works because the minor vi arrives just as the major chords start to cloy."],
+["Sensitive","major","9:m,5:M,0:M,7:M",92,2,{bittersweet:3,melancholy:2,hopeful:2,nostalgic:2},"The same four chords starting on the minor. Identical harmony, completely different feeling — that's how much starting point matters."],
+["Fifties","major","0:M,9:m,5:M,7:M",120,1,{retro:3,innocent:3,sweet:2,nostalgic:3},"Doo-wop. Impossible to make this one sound cynical."],
+["Three Chord Sun","major","0:M,5:M,7:M,0:M",128,1,{sunny:3,joyful:2,folky:2,energetic:2},"I–IV–V. Every chord is major, everything resolves, nothing is hiding."],
+["Campfire","major","0:M,5:M,0:M,7:M",96,1,{folky:3,rustic:3,warm:2,peaceful:1},"Returns home every other bar, so anyone can sing over it without knowing where it's going."],
+["Canon","major","0:M,7:M,9:m,4:m,5:M,0:M,5:M,7:M",84,8,{bittersweet:3,romantic:3,sacred:2,cinematic:2},"Pachelbel's descending bass. Overused for three hundred years because it genuinely does make people cry at weddings."],
+["Sweet Shop","major","0:M,9:m7,2:m7,7:7",116,1,{retro:2,sweet:2,jazzy:2,playful:2},"I–vi–ii–V, the turnaround that powered a thousand standards. Circular and cheerful."],
+["Sunday Morning","major","0:M7,5:M7",76,8,{chilled:3,peaceful:3,dreamy:3,warm:2},"Two major sevenths a fourth apart. No tension anywhere in it — the harmonic equivalent of no plans."],
+["Lo-fi Study","major","5:M7,4:m7,2:m7,0:M7",78,5,{chilled:3,dreamy:2,nostalgic:2,sophisticated:1},"A stepwise descent down to the tonic, all sevenths. Soft enough to work behind something else."],
+["Bossa Breeze","major","2:m7,7:7,0:M7,9:7",132,5,{sophisticated:3,warm:2,sensual:2,chilled:2},"A ii–V–I that refuses to stop, looping back through a major VI. Warm and slightly restless."],
+["Two Five One","major","2:m7,7:7,0:M7,0:M7",138,5,{jazzy:3,sophisticated:3,resolved:2},"The sentence structure of jazz. Tension, pull, home."],
+["Smooth Lounge","major","0:M7,9:m7,2:m7,7:7",108,5,{jazzy:3,chilled:2,sensual:2,sophisticated:2},"The Fifties progression with every chord given a seventh. Same bones, much later evening."],
+["Gospel Amen","major","0:M,0:7,5:M,5:m,0:M",72,0,{sacred:3,soulful:3,bittersweet:2,warm:2},"The borrowed minor iv on the way home is the single most reliable lump-in-throat chord in Western music."],
+["Soul Riser","major","0:M7,4:m7,5:M,7:M",96,2,{soulful:3,uplifting:2,warm:3},"Climbs by step from the tonic. Feels like standing up."],
+["Motown","major","0:M,5:M,2:m,7:M",124,2,{groovy:3,joyful:2,retro:2,energetic:2},"Major, minor, major, and straight back round. Built for a rhythm section to push against."],
+["Funk Two","major","0:7,5:7",104,6,{groovy:3,gritty:2,energetic:2,sensual:1},"Two dominant sevenths. Harmonically almost nothing, which is the point — the groove is the song."],
+["Mirrorball","major","9:m7,2:m7,7:7",122,6,{groovy:3,joyful:2,retro:2,energetic:3},"Minor sevenths falling into a dominant, over and over. Disco's engine room."],
+["Twelve-Bar Blues","major","0:7,0:7,0:7,0:7,5:7,5:7,0:7,0:7,7:7,5:7,0:7,7:7",92,4,{bluesy:3,gritty:2,rustic:2,weary:1},"Everything is a dominant seventh, so nothing is ever fully at rest. Twelve bars, a hundred years, no sign of stopping."],
+["Country Road","major","0:M,10:M,5:M,0:M",112,4,{rustic:3,warm:3,folky:2,nostalgic:2},"The flat seventh borrowed from Mixolydian — instantly rural, instantly unhurried."],
+["Highway","major","0:M,10:M,5:M,5:M",128,3,{driving:3,warm:2,energetic:2,defiant:1},"Same borrowed chord, faster, sitting on the IV instead of going home. Motion without arrival."],
+["Stadium Lift","major","8:M,10:M,0:M,0:M",104,0,{triumphant:3,heroic:3,epic:3,uplifting:2},"Two borrowed chords climbing into the tonic. If a film needs the hero to stand up, this is playing."],
+["Fanfare","major","0:M,5:M,10:M,0:M",100,0,{heroic:3,epic:2,cinematic:2,triumphant:2},"Bright, wide and slightly archaic. Coronations and end credits."],
+["Royal Road","major","5:M7,7:7,4:m7,9:m",128,2,{bittersweet:3,dramatic:2,uplifting:2,cinematic:2},"The backbone of J-pop and anime themes. Starts away from home and lands on the minor — hopeful and sad in the same four bars."],
+["City Pop","major","5:M7,7:7,4:m7,9:7",112,5,{retro:2,sophisticated:3,warm:2,sensual:2},"The Royal Road with the last chord turned major, which flicks the whole thing from wistful to glamorous."],
+["The Slip","major","0:M,4:M,5:M,5:m",92,0,{bittersweet:3,longing:3,dramatic:2,unresolved:2},"A major III where a minor one belongs, then a minor IV where a major one belongs. Two wrong chords, both devastating."],
+["Poignant Turn","major","0:M,5:M,5:m,0:M",80,8,{bittersweet:3,tender:2,nostalgic:2},"Major IV turning minor before it goes home. The cheapest way to break someone's heart in one bar."],
+["Dream Pop Drift","major","0:M7,4:m,5:M,5:m",84,8,{dreamy:3,floating:2,bittersweet:2},"Soft-edged sevenths with the same minor-IV twist, slowed until it stops feeling like a chord change."],
+["Shoegaze Wash","major","0:M9,5:M9",88,0,{dreamy:3,lush:3,floating:3,hypnotic:2},"Major ninths hold too many notes to sound like chords. They sound like weather."],
+["Ambient Drift","major","0:M7,9:m9",60,8,{peaceful:3,floating:3,sparse:2,dreamy:2},"Two chords sharing most of their notes, so the change is barely a change."],
+["Lullaby","major","0:M,5:M,7:M,0:M",66,8,{tender:3,innocent:3,peaceful:3,sweet:2},"The three primary chords, played slowly and picked rather than strummed. Nothing surprising ever happens, which is the entire brief."],
+["Hymn","major","0:M,5:M,7:M,0:M,5:M,0:M,7:M,0:M",72,0,{sacred:3,peaceful:2,warm:2,resolved:2},"Eight bars, all primary chords, two clear cadences. Written to be sung by people who cannot sing."],
+["Carol","major","0:M,9:m,2:m,7:7",96,1,{nostalgic:3,sweet:2,innocent:2,sacred:1},"Turn-of-the-century parlour harmony — the reason certain chords smell like December."],
+["Baroque Circle","major","0:M,5:M,11:d,4:m,9:m,2:m,7:M,0:M",88,8,{sophisticated:3,dramatic:2,cinematic:1,sacred:2},"Every diatonic chord in the key, in falling-fifths order. A complete tour that ends exactly where it started."],
+["Waltz","major","0:M,7:M,0:M,7:M",108,0,{tender:2,retro:2,romantic:2,playful:1},"Tonic and dominant, nothing else. Count it in three."],
+["Skank","major","0:M,7:M,9:m,5:M",78,7,{chilled:3,warm:2,groovy:2,sunny:2},"Ordinary chords, extraordinary placement — everything lands on the upbeat and the whole thing tilts."],
+["Ska Sprint","major","0:M,5:M,7:M,5:M",160,7,{energetic:3,playful:3,joyful:2},"Same upstroke trick at twice the speed. Relentlessly, almost aggressively cheerful."],
+["Surf Noir","minor","0:m,8:M,0:m,10:M",150,3,{retro:2,energetic:2,mysterious:1,exotic:1},"Minor tonic, fast tempo, major chords either side. Sunshine with something underneath it."],
+["Clockwork","major","0:M,3:M,5:M,8:M",128,0,{quirky:3,playful:2,mysterious:1},"All major chords, but from three different keys. Bright and slightly deranged."],
+["Music Box","major","0:M,4:m,5:M,2:m",92,8,{innocent:3,quirky:2,tender:2,mysterious:1},"A gentle progression that keeps stepping somewhere unexpected. Nursery rhyme with a shadow on it."],
+["Tangle","major","0:M9,4:m7,5:M7,2:m9",150,3,{quirky:3,energetic:2,sophisticated:2},"Extended chords played fast and clean. Busy without being heavy."],
+["Anthem","major","0:M,7:M,9:m,4:m,5:M",96,2,{uplifting:3,epic:2,cinematic:2,triumphant:2},"Five bars instead of four, so it never sits still. Built for a last chorus."],
+["Slow Burn","major","9:m,4:m,5:M,0:M",74,8,{longing:3,melancholy:2,cinematic:2},"Two minor chords before either major one turns up. Takes its time deciding to be hopeful."],
+["The Question","major","0:M,5:M,2:m,7:s4",88,8,{unresolved:3,longing:2,tense:1},"Ends on a suspended dominant that never resolves. Leaves the door open on purpose."],
+["Suspended Sky","major","0:s2,5:M,7:s4,5:M",84,8,{floating:3,dreamy:2,peaceful:2,unresolved:1},"Sus chords have no third, so they refuse to commit to happy or sad. Wide open."],
+["Neo-Soul","major","2:m9,7:9,0:M9,9:m9",88,5,{soulful:3,sensual:3,sophisticated:3,chilled:2},"A ii–V–I with ninths on everything. Lush, slightly blurred, unhurried."],
+["Descending Bass","major","0:M,10:M,9:m,7:M",84,8,{wistful:3,melancholy:2,nostalgic:2},"The bass walks down four steps while the chords change above it. Motion downward always reads as letting go."],
+["Storm Front","minor","0:m,8:M,10:M,5:m",100,3,{epic:3,cinematic:3,dramatic:3},"The big minor loop with the iv held back until the last bar, so the tension keeps building past where you expect it to break."],
+["Dread","minor","0:d7,0:m",56,0,{eerie:3,tense:3,ominous:3,sparse:2},"A diminished seventh resolving to the tonic, as slowly as you can stand. Every horror score does this."],
+["Suspense Ladder","minor","0:m,1:M,3:M,8:M",100,0,{tense:3,mysterious:2,ominous:2,cinematic:2},"Climbs by uneven steps through chords that don't belong together. You can't predict the next one, which is the effect."],
+["Drone","minor","0:s2,10:s2",58,8,{peaceful:3,hypnotic:3,sparse:3,floating:2},"Two suspended chords, no thirds anywhere. Barely a progression at all."]
+];
+
+/* ============================ mood search ============================ */
+var STOPWORDS = {};
+("a an the and or but of for in with to me i want need give show find make something that this it is "+
+ "feels feel feeling felt sounds sound sounding like really very quite bit little more most some kind "+
+ "sort type vibe vibes mood moods music song songs tune chord chords progression progressions guitar "+
+ "play playing about please can you get").split(" ").forEach(function(w){ STOPWORDS[w] = 1; });
+
+var TERMS = null;      /* term -> {tag:weight} */
+var TERMLIST = null;   /* for fuzzy matching */
+
+function buildTerms(){
+  TERMS = Object.create(null);
+  VOCAB.forEach(function(entry){
+    entry[0].split(" ").forEach(function(word){
+      var t = TERMS[word] || (TERMS[word] = {});
+      for (var k in entry[1]) t[k] = Math.max(t[k] || 0, entry[1][k]);
+    });
+  });
+  /* every canonical tag is a search term for itself */
+  MOOD_TAGS.forEach(function(tag){
+    var t = TERMS[tag] || (TERMS[tag] = {});
+    t[tag] = Math.max(t[tag] || 0, 3);
+  });
+  TERMLIST = Object.keys(TERMS);
+}
+
+function normalize(s){
+  return String(s).toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9+ ]+/g, " ")
+    .replace(/\s+/g, " ").trim();
+}
+
+/* singular/participle forms so "haunting", "dreams", "driven" all land */
+function variants(w){
+  var v = [w];
+  if (w.length > 3 && /s$/.test(w) && !/ss$/.test(w)) v.push(w.slice(0, -1));
+  if (w.length > 4 && /es$/.test(w)) v.push(w.slice(0, -2));
+  if (w.length > 5 && /ing$/.test(w)){ v.push(w.slice(0, -3)); v.push(w.slice(0, -3) + "e"); }
+  if (w.length > 4 && /ed$/.test(w)){ v.push(w.slice(0, -2)); v.push(w.slice(0, -1)); }
+  if (w.length > 4 && /ly$/.test(w)) v.push(w.slice(0, -2));
+  if (w.length > 4 && /ness$/.test(w)) v.push(w.slice(0, -4));
+  if (w.length > 3 && /i(er|est)$/.test(w)) v.push(w.replace(/i(er|est)$/, "y"));
+  if (w.length > 4 && /(er|est)$/.test(w)) v.push(w.replace(/(er|est)$/, ""));
+  return v;
+}
+
+function editDistance(a, b, max){
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  var prev = [], cur = [], i, j;
+  for (j = 0; j <= b.length; j++) prev[j] = j;
+  for (i = 1; i <= a.length; i++){
+    cur[0] = i;
+    var best = cur[0];
+    for (j = 1; j <= b.length; j++){
+      cur[j] = Math.min(prev[j] + 1, cur[j-1] + 1, prev[j-1] + (a.charAt(i-1) === b.charAt(j-1) ? 0 : 1));
+      if (cur[j] < best) best = cur[j];
+    }
+    if (best > max) return max + 1;
+    prev = cur.slice();
+  }
+  return prev[b.length];
+}
+
+function lookupTerm(term){
+  if (TERMS[term]) return {term: term, tags: TERMS[term], exact: true};
+  var forms = variants(term), i;
+  for (i = 1; i < forms.length; i++)
+    if (TERMS[forms[i]]) return {term: forms[i], tags: TERMS[forms[i]], exact: true};
+  if (term.length < 4 || term.indexOf("+") >= 0) return null;
+
+  /* a longer word that starts with a known one, e.g. "dreamily" -> "dreamy" */
+  var bestPrefix = null;
+  for (i = 0; i < TERMLIST.length; i++){
+    var t = TERMLIST[i];
+    if (t.length >= 4 && t.indexOf("+") < 0 && (term.indexOf(t) === 0 || t.indexOf(term) === 0)){
+      if (!bestPrefix || Math.abs(t.length - term.length) < Math.abs(bestPrefix.length - term.length)) bestPrefix = t;
+    }
+  }
+  if (bestPrefix) return {term: bestPrefix, tags: TERMS[bestPrefix], fuzzy: true};
+
+  /* last resort: a typo */
+  var max = term.length >= 7 ? 2 : 1, best = null, bestD = 99;
+  for (i = 0; i < TERMLIST.length; i++){
+    var c = TERMLIST[i];
+    if (c.indexOf("+") >= 0 || Math.abs(c.length - term.length) > max) continue;
+    var d = editDistance(term, c, max);
+    if (d <= max && d < bestD){ bestD = d; best = c; }
+  }
+  return best ? {term: best, tags: TERMS[best], fuzzy: true} : null;
+}
+
+function moodSearch(query){
+  if (!TERMS) buildTerms();
+  var toks = normalize(query).split(" ").filter(Boolean);
+  var want = {}, matched = [], unknown = [], i = 0;
+
+  while (i < toks.length){
+    var hit = null, span = 1;
+    for (var n = Math.min(4, toks.length - i); n >= 1; n--){
+      var term = toks.slice(i, i + n).join("+");
+      var m = lookupTerm(term);
+      if (m){ hit = m; span = n; break; }
+    }
+    if (hit){
+      for (var tag in hit.tags) want[tag] = (want[tag] || 0) + hit.tags[tag];
+      if (matched.indexOf(hit.term) < 0) matched.push(hit.term.replace(/\+/g, " "));
+    } else if (!STOPWORDS[toks[i]]){
+      unknown.push(toks[i]);
+    }
+    i += span;
+  }
+
+  var keys = Object.keys(want);
+  if (!keys.length) return {results: [], matched: matched, unknown: unknown};
+
+  var qMag = 0;
+  keys.forEach(function(k){ qMag += want[k] * want[k]; });
+  qMag = Math.sqrt(qMag) || 1;
+
+  var scored = PROGS.map(function(p, idx){
+    var tags = p[5], dot = 0, mag = 0, overlap = [];
+    for (var t in tags){
+      mag += tags[t] * tags[t];
+      if (want[t]){ dot += want[t] * tags[t]; overlap.push(t); }
+    }
+    overlap.sort(function(a, b){ return (want[b] * tags[b]) - (want[a] * tags[a]); });
+    return {i: idx, p: p, score: dot / (Math.sqrt(mag) || 1) / qMag, why: overlap.slice(0, 3)};
+  }).filter(function(r){ return r.score > 0; });
+
+  scored.sort(function(a, b){ return b.score - a.score || a.i - b.i; });
+  return {results: scored.slice(0, 8), matched: matched, unknown: unknown};
+}
+
+function progBars(p){
+  return p[2].split(",").map(function(tok){
+    var bits = tok.split(":");
+    return {root: mod12(+bits[0]), quality: QCODE[bits[1]]};
+  });
+}
+
 /* ============================ audio engine ============================ */
 var ctx = null, master = null, wetGain = null, toneFilter = null;
 var bufCache = Object.create(null);
@@ -652,16 +1120,17 @@ function pluck(midi, when, gain, muted, pan){
   return voice;
 }
 
-function dampAll(when){
-  for (var i=0; i<active.length; i++){
-    var v = active[i];
-    try {
-      v.g.gain.cancelScheduledValues(when);
-      v.g.gain.setValueAtTime(Math.max(0.0001, v.g.gain.value), when);
-      v.g.gain.exponentialRampToValueAtTime(0.0008, when + 0.22);
-    } catch(e){}
+function rampDown(voices, when){
+  for (var i=0; i<voices.length; i++){
+    var v = voices[i];
+    /* a voice that has not started yet still has its envelope ahead of it,
+       so start the decay just after it speaks rather than before */
+    try { v.g.gain.setTargetAtTime(0.0006, Math.max(when, v.when + 0.02), 0.06); } catch(e){}
   }
-  active.length = 0;
+}
+function dampAll(when){
+  rampDown(active, when);
+  active = [];
 }
 
 function click(when, strong){
@@ -679,22 +1148,22 @@ function click(when, strong){
 function strum(type, chord, when, accent){
   var v = voicingFor(chord.root, chord.quality);
   var notes = notesFor(v.frets);
-  if (!notes.length) return;
+  if (!notes.length) return [];
   var level = accent ? 1.06 : 0.94;
 
+  var made = [];
   if (type === "B"){
     var bass = notes[0];
-    pluck(bass.midi, when, 0.95 * level, false, -0.12);
+    made.push(pluck(bass.midi, when, 0.95 * level, false, -0.12));
     midiSend(bass.midi, when, 96);
-    return;
+    return made;
   }
   if (type === "C"){
-    var top = notes.slice(-3);
-    top.forEach(function(n, i){
-      pluck(n.midi, when + i*0.012, 0.62 * level, false, 0.05 + i*0.06);
+    notes.slice(-3).forEach(function(n, i){
+      made.push(pluck(n.midi, when + i*0.012, 0.62 * level, false, 0.05 + i*0.06));
       midiSend(n.midi, when + i*0.012, 74);
     });
-    return;
+    return made;
   }
 
   var order, spread, vol, muted = false;
@@ -705,9 +1174,10 @@ function strum(type, chord, when, accent){
   order.forEach(function(n, i){
     var t = when + i*spread + (Math.random()-0.5)*0.002;
     var gain = vol * level * (0.9 + Math.random()*0.2);
-    pluck(n.midi, t, gain, muted, (n.string - 2.5) / 5 * 0.35 * (type === "U" ? -1 : 1));
+    made.push(pluck(n.midi, t, gain, muted, (n.string - 2.5) / 5 * 0.35 * (type === "U" ? -1 : 1)));
     if (!muted) midiSend(n.midi, t, Math.round(Math.min(120, gain*118)));
   });
+  return made;
 }
 
 /* ============================ MIDI out (optional) ============================ */
@@ -1013,6 +1483,143 @@ function refresh(){
   $("#btnPlay").disabled = !state.bars.length;
 }
 
+/* ============================ mood tab ============================ */
+var QUICK = ["melancholic","chilled","epic","dreamy","angry","romantic","spooky",
+  "nostalgic","jazzy","triumphant","bluesy","hopeful"];
+
+function progChordNames(p){
+  var mode = p[1];
+  return progBars(p).map(function(c){
+    var abs = {root: mod12(state.key.root + c.root), quality: c.quality};
+    return {name: chordName(abs), rn: romanFor(abs, {root: state.key.root, mode: mode})};
+  });
+}
+
+function previewProg(p){
+  audio();
+  stop();
+  var bars = progBars(p).slice(0, 8).map(function(c){
+    return {root: mod12(state.key.root + c.root), quality: c.quality};
+  });
+  var pat = PATTERNS[p[4]][1], slotDur = 60 / p[3] / 2;
+  var t0 = ctx.currentTime + 0.12;
+  var prev = null;
+  bars.forEach(function(c, bi){
+    var barStart = t0 + bi * 8 * slotDur;
+    if (prev) rampDown(prev, barStart - 0.01);
+    var voices = [];
+    for (var s = 0; s < 8; s++){
+      if (pat[s] === "-") continue;
+      voices = voices.concat(strum(pat[s], c, barStart + s * slotDur, s === 0 || s === 4));
+    }
+    prev = voices;
+  });
+}
+
+function useProg(p){
+  state.bars = progBars(p).map(function(c){
+    return {root: mod12(state.key.root + c.root), quality: c.quality};
+  });
+  state.key.mode = p[1];
+  state.bpm = p[3];
+  state.pattern = PATTERNS[p[4]][1].slice();
+  state.sel = 0;
+  syncControls();
+  renderPatterns(); renderGrid();
+  refresh();
+  showTab("chords");
+  window.scrollTo({top: 0, behavior: "smooth"});
+  play();
+}
+
+function renderMoodResults(res, query){
+  var box = $("#moodResults");
+  box.innerHTML = "";
+
+  if (!res.results.length){
+    var msg = el("div", "card");
+    msg.innerHTML = '<p class="res-note" style="margin:0">Nothing matched <b>' + esc(query) + '</b>. ' +
+      'Try a feeling (<i>wistful, defiant, tender</i>), a genre (<i>bossa nova, grunge, gospel</i>), ' +
+      'a scene (<i>rainy night, boss fight, road trip</i>), or open the full list below.</p>';
+    box.appendChild(msg);
+    return;
+  }
+
+  var head = el("p", "lab");
+  head.textContent = res.results.length + " progression" + (res.results.length === 1 ? "" : "s") +
+    " for " + res.matched.slice(0, 5).join(", ") +
+    (res.unknown.length ? "  (ignored: " + res.unknown.slice(0, 4).join(", ") + ")" : "");
+  box.appendChild(head);
+
+  res.results.forEach(function(r){
+    var p = r.p, chords = progChordNames(p);
+    var card = el("div", "res");
+
+    var top = el("div", "res-top");
+    top.innerHTML = '<span class="res-name">' + esc(p[0]) + '</span>' +
+      '<span class="res-mode">' + esc(p[1]) + ' &middot; ' + p[3] + ' bpm &middot; ' + esc(PATTERNS[p[4]][0]) + '</span>';
+    card.appendChild(top);
+
+    var bars = el("div", "res-bars");
+    chords.forEach(function(c){
+      bars.appendChild(el("span", "res-bar", "<b>" + esc(c.name) + "</b><span>" + esc(c.rn) + "</span>"));
+    });
+    card.appendChild(bars);
+
+    card.appendChild(el("p", "res-note", esc(p[6])));
+
+    var why = el("div", "res-why");
+    r.why.forEach(function(t){ why.appendChild(el("span", "tagchip", esc(t))); });
+    card.appendChild(why);
+
+    var acts = el("div", "res-acts");
+    var hear = el("button", "btn", "Preview");
+    hear.onclick = function(){ previewProg(p); };
+    var use = el("button", "btn primary", "Use this");
+    use.onclick = function(){ useProg(p); };
+    acts.appendChild(hear); acts.appendChild(use);
+    card.appendChild(acts);
+
+    box.appendChild(card);
+  });
+}
+
+function runMoodSearch(q){
+  var query = (q == null ? $("#moodQ").value : q) || "";
+  if (q != null) $("#moodQ").value = q;
+  query = query.trim();
+  if (!query){ $("#moodResults").innerHTML = ""; return; }
+  renderMoodResults(moodSearch(query), query);
+}
+
+function renderMoodTab(){
+  var quick = $("#moodQuick");
+  quick.innerHTML = "";
+  QUICK.forEach(function(w){
+    var b = el("button", "chip", esc(w));
+    b.onclick = function(){ runMoodSearch(w); };
+    quick.appendChild(b);
+  });
+
+  var all = $("#allMoods");
+  all.innerHTML = "";
+  MOOD_TAGS.slice().sort().forEach(function(t){
+    var b = el("button", "chip", esc(t));
+    b.onclick = function(){ runMoodSearch(t); };
+    all.appendChild(b);
+  });
+
+  $("#moodGo").onclick = function(){ runMoodSearch(); };
+  $("#moodQ").addEventListener("keydown", function(e){
+    if (e.key === "Enter"){ e.preventDefault(); runMoodSearch(); }
+  });
+  $("#moodLucky").onclick = function(){
+    var p = PROGS[Math.floor(Math.random() * PROGS.length)];
+    $("#moodQ").value = "";
+    renderMoodResults({results: [{p: p, why: Object.keys(p[5]).slice(0, 3), score: 1}], matched: ["a random pick"], unknown: []}, "");
+  };
+}
+
 /* ============================ actions ============================ */
 function addBar(){
   state.bars.push({root: state.pick.root, quality: state.pick.quality});
@@ -1022,7 +1629,7 @@ function addBar(){
 }
 
 function showTab(name){
-  ["chords","strum","songs"].forEach(function(n){
+  ["mood","chords","strum","songs"].forEach(function(n){
     var on = n === name;
     $("#tab-" + n).setAttribute("aria-selected", on ? "true" : "false");
     $("#p-" + n).hidden = !on;
@@ -1081,7 +1688,7 @@ function wire(){
   $("#keyRoot").onchange = function(){ state.key.root = +this.value; renderDiatonic(); renderStrip(); };
   $("#keyMode").onchange = function(){ state.key.mode = this.value; renderDiatonic(); renderStrip(); };
 
-  ["chords","strum","songs"].forEach(function(n){ $("#tab-" + n).onclick = function(){ showTab(n); }; });
+  ["mood","chords","strum","songs"].forEach(function(n){ $("#tab-" + n).onclick = function(){ showTab(n); }; });
 
   $("#btnHear").onclick = function(){ preview(state.pick); };
   $("#btnAdd").onclick = addBar;
@@ -1152,6 +1759,7 @@ function init(){
   renderPatterns();
   renderGrid();
   renderPresets();
+  renderMoodTab();
   renderSaved();
   refresh();
   initMidi();

@@ -14,6 +14,15 @@ synthesised acoustic guitar. No accounts, no server, no data leaves the device.
   Classic open voicings are used where they exist; everything else falls back to
   movable E-shape and A-shape barre forms, picked for the lowest comfortable
   position.
+- **Mood search** — describe how it should feel and get progressions back.
+  74 progressions are tagged across 57 canonical moods, and a vocabulary of
+  ~1,300 terms maps onto those tags, so feelings ("melancholic", "defiant",
+  "bittersweet"), genres ("bossa nova", "grunge", "gospel", "city pop"),
+  scenes ("rainy night", "road trip", "boss fight", "funeral") and loose phrases
+  ("something chilled but a bit sad") all resolve. Matching handles plurals and
+  participles, multi-word phrases, and typos, and every result explains why it
+  feels the way it does and can be previewed without disturbing what you are
+  already working on.
 - **Key awareness** — pick a key and the seven diatonic chords appear as
   one-tap buttons. Every bar is labelled with its roman numeral, so the shape of
   the progression is readable at a glance.
@@ -47,6 +56,9 @@ at `https://adamwood999-lab.github.io/claudenew/` within a minute or two, and
 updates on every push.
 
 ## Notes on the music
+
+Every one of the 57 mood tags is used by at least one progression and all 1,304
+searchable terms resolve to at least one result, so no keyword is a dead end.
 
 Voicings are generated rather than stored, then checked: all 228 root/quality
 combinations were verified to contain only chord tones, to include the root and
