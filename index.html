@@ -1227,7 +1227,8 @@ function relatedSearch(nudge){
 /* ============================ audio engine ============================ */
 var ctx = null, master = null, wetGain = null, toneFilter = null;
 var bufCache = Object.create(null);
-var active = [];   /* currently ringing voices, for damping on chord change */
+var active = [];     /* recent voices, damped musically when the chord changes */
+var scheduled = [];  /* every voice still owning a source node, for hard stops */
 
 function audio(){
   if (!ctx){
@@ -1329,10 +1330,34 @@ function pluck(midi, when, gain, muted, pan){
   else { src.connect(g); g.connect(master); }
   src.start(when);
   src.stop(when + (muted ? 0.2 : src.buffer.duration));
-  var voice = {g:g, when:when};
+  var voice = {g:g, src:src, when:when, ends:when + (muted ? 0.2 : src.buffer.duration)};
   active.push(voice);
   if (active.length > 90) active.splice(0, active.length - 90);
+
+  scheduled.push(voice);
+  if (scheduled.length > 400){
+    var now = ctx.currentTime;
+    scheduled = scheduled.filter(function(v){ return v.ends > now; });
+  }
   return voice;
+}
+
+/* Ramping a gain is not enough to cancel audio that is scheduled but has not
+   started: its envelope is still ahead of it. Stop the source too. */
+function killAllAudio(){
+  if (!ctx) return;
+  var now = ctx.currentTime;
+  for (var i = 0; i < scheduled.length; i++){
+    var v = scheduled[i];
+    try {
+      v.g.gain.cancelScheduledValues(now);
+      v.g.gain.setValueAtTime(v.g.gain.value, now);
+      v.g.gain.setTargetAtTime(0.0001, now, 0.025);
+      v.src.stop(now + 0.13);
+    } catch(e){}
+  }
+  scheduled = [];
+  active = [];
 }
 
 function rampDown(voices, when){
@@ -1438,12 +1463,13 @@ function load(k, fb){ try { var v = localStorage.getItem(k); return v ? JSON.par
 function save(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
 
 /* ============================ transport ============================ */
-var playing = false, timer = null;
+var playing = false, timer = null, playToken = 0;
 var nextTime = 0, slot = 0, bar = 0, uiQueue = [], lastChordKey = "";
 
 function slotSeconds(){ return 60 / state.bpm / 2; }
 
-function scheduler(){
+function scheduler(token){
+  if (token !== playToken || !playing) return;
   var ahead = 0.14;
   while (nextTime < ctx.currentTime + ahead){
     if (!state.bars.length){ stop(); return; }
@@ -1470,28 +1496,38 @@ function scheduler(){
     slot++;
     if (slot >= 8){ slot = 0; bar++; }
   }
-  timer = setTimeout(scheduler, 25);
+  timer = setTimeout(function(){ scheduler(token); }, 25);
 }
 
 function play(){
   audio();
   if (!state.bars.length) return;
+  stop();                       /* never leave a second chain or a preview running */
+  playToken++;
+  var token = playToken;
   playing = true;
   slot = 0; bar = 0; lastChordKey = ""; uiQueue.length = 0;
   nextTime = ctx.currentTime + 0.08;
-  scheduler();
-  paint();
+  scheduler(token);
+  paint(token);
   setPlayIcon(true);
 }
+/* the progression has run out and is not looping: stop scheduling, let it ring */
 function stopAt(when){
   clearTimeout(timer); timer = null;
-  playing = false;
-  setTimeout(function(){ setPlayIcon(false); clearPlayhead(); }, Math.max(0, (when - ctx.currentTime) * 1000));
+  var token = playToken;
+  setTimeout(function(){
+    if (token !== playToken) return;
+    playing = false;
+    setPlayIcon(false);
+    clearPlayhead();
+  }, Math.max(0, (when - ctx.currentTime) * 1000 + 40));
 }
 function stop(){
   clearTimeout(timer); timer = null;
+  playToken++;
   playing = false;
-  if (ctx) dampAll(ctx.currentTime);
+  killAllAudio();
   setPlayIcon(false);
   clearPlayhead();
 }
@@ -1503,15 +1539,15 @@ function setPlayIcon(on){
 }
 
 var curBar = -1, curSlot = -1;
-function paint(){
-  if (!playing){ return; }
+function paint(token){
+  if (!playing || token !== playToken) return;
   var now = ctx.currentTime;
   while (uiQueue.length && uiQueue[0].t <= now){
     var e = uiQueue.shift();
     if (e.bar !== curBar){ curBar = e.bar; markBar(curBar); }
     if (e.slot !== curSlot){ curSlot = e.slot; markSlot(curSlot); }
   }
-  requestAnimationFrame(paint);
+  requestAnimationFrame(function(){ paint(token); });
 }
 function markBar(i){
   var cards = document.querySelectorAll(".bar[data-i]");
@@ -1713,10 +1749,14 @@ function progChordNames(p){
 function previewProg(p){
   audio();
   stop();
-  var bars = progBars(p).slice(0, 8).map(function(c){
+  var slotDur = 60 / p[3] / 2;
+  /* cap the preview by time, not bar count, so a slow progression does not
+     leave half a minute of audio scheduled */
+  var maxBars = Math.max(2, Math.min(8, Math.floor(11 / (slotDur * 8))));
+  var bars = progBars(p).slice(0, maxBars).map(function(c){
     return {root: mod12(state.key.root + c.root), quality: c.quality};
   });
-  var pat = PATTERNS[p[4]][1], slotDur = 60 / p[3] / 2;
+  var pat = PATTERNS[p[4]][1];
   var t0 = ctx.currentTime + 0.12;
   var prev = null;
   bars.forEach(function(c, bi){
