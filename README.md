@@ -32,6 +32,12 @@ synthesised acoustic guitar. No accounts, no server, no data leaves the device.
 - **Key awareness** — pick a key and the seven diatonic chords appear as
   one-tap buttons. Every bar is labelled with its roman numeral, so the shape of
   the progression is readable at a glance.
+- **Chord lengths** — each chord lasts anywhere from one to eight beats. Select
+  it and use the stepper to shorten or extend; the card's width and its row of
+  beat pips show how long it holds, and a running total gives the length of the
+  whole progression. The strumming pattern stays a bar-long rhythm underneath
+  rather than restarting on every chord, so two two-beat chords share one bar of
+  strumming the way they would if you were playing it.
 - **Strumming** — an eight-slot grid per bar. Each slot can be a downstroke,
   upstroke, muted chuck, bass note or top-string stab, so the same grid covers
   strumming, boom-chick and Travis-style picking. Nine presets to start from,

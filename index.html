@@ -109,7 +109,16 @@ select{
   width:52px;display:flex;align-items:center;justify-content:center;
   background:transparent;border-style:dashed;color:var(--ink3);font-size:22px;
 }
-.bartools{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 12px}
+.bartools{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 12px;align-items:center}
+.bar svg.fb{margin:0 auto}
+.beats{display:flex;gap:2px;justify-content:center;margin-top:5px}
+.beats i{flex:1;max-width:11px;height:3px;border-radius:1px;background:var(--line2)}
+.bar.sel .beats i{background:var(--ink2)}
+.bar.on .beats i{background:var(--accent)}
+.stepper{display:flex;align-items:center;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);overflow:hidden}
+.stepper button{border:0;background:transparent;width:32px;height:34px;font-size:17px;line-height:1;cursor:pointer;color:var(--ink)}
+.stepper button[disabled]{opacity:.35;cursor:default}
+.stepper span{font-family:var(--f-mono);font-size:12px;min-width:56px;text-align:center;font-variant-numeric:tabular-nums}
 
 /* ---------- generic controls ---------- */
 .btn{
@@ -329,8 +338,8 @@ input[type=text]{
         <p class="pos" id="dgmPos">open position</p>
         <div class="acts">
           <button class="btn" id="btnHear">Hear it</button>
-          <button class="btn primary" id="btnAdd">Add bar</button>
-          <button class="btn" id="btnReplace">Replace bar</button>
+          <button class="btn primary" id="btnAdd">Add chord</button>
+          <button class="btn" id="btnReplace">Replace chord</button>
         </div>
       </div>
     </div>
@@ -339,7 +348,7 @@ input[type=text]{
   <section class="panel" id="p-strum" role="tabpanel" aria-labelledby="tab-strum" hidden>
     <p class="lab">Pattern</p>
     <div class="chips" id="patPresets"></div>
-    <p class="lab">Eight-note grid — tap to change</p>
+    <p class="lab">Eighth-note grid &mdash; one bar, looping under the chords</p>
     <div class="grid" id="grid"></div>
     <div class="legend">
       <span><b>↓</b> down</span><span><b>↑</b> up</span><span><b>×</b> muted chuck</span>
@@ -364,7 +373,7 @@ input[type=text]{
     <div class="row">
       <button class="btn" id="trDown">− semitone</button>
       <button class="btn" id="trUp">+ semitone</button>
-      <button class="btn ghost danger" id="btnClear">Clear bars</button>
+      <button class="btn ghost danger" id="btnClear">Clear all</button>
     </div>
     <p class="lab">Save this progression</p>
     <div class="row">
@@ -1033,7 +1042,7 @@ function moodSearch(query){
 function progBars(p){
   return p[2].split(",").map(function(tok){
     var bits = tok.split(":");
-    return {root: mod12(+bits[0]), quality: QCODE[bits[1]]};
+    return {root: mod12(+bits[0]), quality: QCODE[bits[1]], beats: 4};
   });
 }
 
@@ -1458,13 +1467,23 @@ var state = {
   pick: {root: 0, quality: "maj"}
 };
 
+/* a chord lasts a whole number of beats; the eighth-note pattern is a bar long
+   and keeps running underneath, so two 2-beat chords share one bar of strumming */
+function barBeats(c){
+  var b = c && c.beats;
+  return (b >= 1 && b <= 8) ? b : 4;
+}
+function totalBeats(){
+  return state.bars.reduce(function(a, c){ return a + barBeats(c); }, 0);
+}
+
 var STORE = "fretwork.songs.v1";
 function load(k, fb){ try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch(e){ return fb; } }
 function save(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
 
 /* ============================ transport ============================ */
 var playing = false, timer = null, playToken = 0;
-var nextTime = 0, slot = 0, bar = 0, uiQueue = [], lastChordKey = "";
+var nextTime = 0, patSlot = 0, chordSlot = 0, bar = 0, uiQueue = [], lastChordKey = "";
 
 function slotSeconds(){ return 60 / state.bpm / 2; }
 
@@ -1476,25 +1495,29 @@ function scheduler(token){
     if (bar >= state.bars.length){
       if (!state.loop){ stopAt(nextTime); return; }
       bar = 0;
+      patSlot = 0;   /* the pattern realigns to the top of the progression */
+      chordSlot = 0;
     }
     var chord = state.bars[bar];
-    var type = state.pattern[slot];
+    var slots = barBeats(chord) * 2;
+    var beat = patSlot % 8;
+    var type = state.pattern[beat];
     var t = nextTime;
-    var sw = state.swing / 100 * slotSeconds() * 0.34;
-    if (slot % 2 === 1) t += sw;
+    if (beat % 2 === 1) t += state.swing / 100 * slotSeconds() * 0.34;
 
-    if (slot === 0){
+    if (chordSlot === 0){
       var ck = chord.root + "|" + chord.quality;
       if (ck !== lastChordKey){ dampAll(t - 0.005); lastChordKey = ck; }
     }
-    if (state.click && slot % 2 === 0) click(nextTime, slot === 0);
-    if (type !== "-") strum(type, chord, t, slot === 0 || slot === 4);
+    if (state.click && beat % 2 === 0) click(nextTime, beat === 0);
+    if (type !== "-") strum(type, chord, t, beat === 0 || beat === 4);
 
-    uiQueue.push({t: nextTime, bar: bar, slot: slot});
+    uiQueue.push({t: nextTime, bar: bar, slot: beat});
 
     nextTime += slotSeconds();
-    slot++;
-    if (slot >= 8){ slot = 0; bar++; }
+    patSlot = (patSlot + 1) % 8;
+    chordSlot++;
+    if (chordSlot >= slots){ chordSlot = 0; bar++; }
   }
   timer = setTimeout(function(){ scheduler(token); }, 25);
 }
@@ -1506,7 +1529,7 @@ function play(){
   playToken++;
   var token = playToken;
   playing = true;
-  slot = 0; bar = 0; lastChordKey = ""; uiQueue.length = 0;
+  patSlot = 0; chordSlot = 0; bar = 0; lastChordKey = ""; uiQueue.length = 0;
   nextTime = ctx.currentTime + 0.08;
   scheduler(token);
   paint(token);
@@ -1582,17 +1605,23 @@ function renderStrip(){
   strip.innerHTML = "";
   state.bars.forEach(function(c, i){
     var v = voicingFor(c.root, c.quality);
+    var beats = barBeats(c);
+    var w = Math.max(86, Math.min(158, 72 + beats * 11));
     var card = el("button", "bar" + (i === state.sel ? " sel" : ""));
     card.dataset.i = i;
+    card.style.width = w + "px";
+    var pips = "";
+    for (var k = 0; k < beats; k++) pips += "<i></i>";
     card.innerHTML =
       '<span class="num"><span>' + (i+1) + '</span><span>' + esc(romanFor(c, state.key)) + '</span></span>' +
       '<span class="nm' + (chordName(c).length > 4 ? " long" : "") + '">' + esc(chordName(c)) + '</span>' +
-      diagram(v, 80);
+      diagram(v, Math.max(58, w - 26)) +
+      '<span class="beats" aria-label="' + beats + ' beat' + (beats === 1 ? "" : "s") + '">' + pips + '</span>';
     card.onclick = function(){ state.sel = i; renderStrip(); renderBarTools(); preview(c); };
     strip.appendChild(card);
   });
   var add = el("button", "bar add", "+");
-  add.setAttribute("aria-label", "Add a bar");
+  add.setAttribute("aria-label", "Add a chord");
   add.onclick = function(){ showTab("chords"); addBar(); };
   strip.appendChild(add);
   if (curBar >= 0) markBar(curBar);
@@ -1602,15 +1631,30 @@ function renderBarTools(){
   var box = $("#bartools");
   box.innerHTML = "";
   if (!state.bars.length){
-    box.appendChild(el("p", "empty", "No bars yet — pick a chord below, or start from a classic progression in Songs."));
+    box.appendChild(el("p", "empty", "No chords yet — pick one below, or start from a classic progression in Songs."));
     return;
   }
   var i = Math.min(state.sel, state.bars.length - 1);
   var label = el("span", "lab");
   label.style.margin = "0 4px 0 0";
-  label.textContent = "Bar " + (i+1);
+  label.textContent = "Chord " + (i+1);
   box.appendChild(label);
-  [["Duplicate", function(){ state.bars.splice(i+1, 0, {root:state.bars[i].root, quality:state.bars[i].quality}); state.sel = i+1; refresh(); }],
+
+  var beats = barBeats(state.bars[i]);
+  var step = el("div", "stepper");
+  var minus = el("button", null, "\u2212");
+  minus.setAttribute("aria-label", "Shorten this chord");
+  minus.disabled = beats <= 1;
+  minus.onclick = function(){ setBeats(i, beats - 1); };
+  var val = el("span", null, beats + (beats === 1 ? " beat" : " beats"));
+  var plus = el("button", null, "+");
+  plus.setAttribute("aria-label", "Lengthen this chord");
+  plus.disabled = beats >= 8;
+  plus.onclick = function(){ setBeats(i, beats + 1); };
+  step.appendChild(minus); step.appendChild(val); step.appendChild(plus);
+  box.appendChild(step);
+
+  [["Duplicate", function(){ state.bars.splice(i+1, 0, {root:state.bars[i].root, quality:state.bars[i].quality, beats:barBeats(state.bars[i])}); state.sel = i+1; refresh(); }],
    ["◀", function(){ if (i > 0){ var t = state.bars[i]; state.bars[i] = state.bars[i-1]; state.bars[i-1] = t; state.sel = i-1; refresh(); } }],
    ["▶", function(){ if (i < state.bars.length-1){ var t = state.bars[i]; state.bars[i] = state.bars[i+1]; state.bars[i+1] = t; state.sel = i+1; refresh(); } }],
    ["Delete", function(){ state.bars.splice(i, 1); state.sel = Math.max(0, i-1); refresh(); }]
@@ -1619,6 +1663,17 @@ function renderBarTools(){
     b.onclick = pair[1];
     box.appendChild(b);
   });
+
+  var total = totalBeats();
+  var bars = total / 4;
+  box.appendChild(el("span", "hint",
+    total + " beats \u00b7 " + (Math.round(bars * 100) / 100) + (bars === 1 ? " bar" : " bars")));
+}
+
+function setBeats(i, n){
+  if (!state.bars[i]) return;
+  state.bars[i].beats = Math.max(1, Math.min(8, n));
+  refresh();
 }
 
 function renderDiatonic(){
@@ -1630,7 +1685,8 @@ function renderDiatonic(){
     var b = el("button", "chip", esc(chordName(c)) + '<span class="deg">' + esc(d[2]) + "</span>");
     b.onclick = function(){
       state.pick = {root:c.root, quality:c.quality};
-      state.bars.push({root:c.root, quality:c.quality});
+      var last = state.bars[state.bars.length - 1];
+      state.bars.push({root:c.root, quality:c.quality, beats: last ? barBeats(last) : 4});
       state.sel = state.bars.length - 1;
       preview(c); refresh();
     };
@@ -1658,7 +1714,7 @@ function renderDiagram(){
   $("#dgmBox").innerHTML = diagram(v, 118);
   $("#dgmName").textContent = chordName(state.pick);
   $("#dgmPos").textContent = positionLabel(v);
-  $("#btnReplace").textContent = state.bars.length ? "Replace bar " + (state.sel + 1) : "Replace bar";
+  $("#btnReplace").textContent = state.bars.length ? "Replace chord " + (state.sel + 1) : "Replace chord";
   $("#btnReplace").disabled = !state.bars.length;
 }
 
@@ -1715,7 +1771,7 @@ function renderSaved(){
     row.innerHTML = '<div class="t"><b>' + esc(s.name) + "</b><span>" + esc(names) + "</span></div>";
     var open = el("button", "btn", "Open");
     open.onclick = function(){
-      state.bars = s.bars.map(function(c){ return {root:c.root, quality:c.quality}; });
+      state.bars = s.bars.map(function(c){ return {root:c.root, quality:c.quality, beats: barBeats(c)}; });
       if (s.pattern) state.pattern = s.pattern.slice();
       if (s.bpm) state.bpm = s.bpm;
       if (s.key) state.key = {root:s.key.root, mode:s.key.mode};
@@ -1758,22 +1814,25 @@ function previewProg(p){
   });
   var pat = PATTERNS[p[4]][1];
   var t0 = ctx.currentTime + 0.12;
-  var prev = null;
-  bars.forEach(function(c, bi){
-    var barStart = t0 + bi * 8 * slotDur;
-    if (prev) rampDown(prev, barStart - 0.01);
+  var prev = null, cursor = t0, patAt = 0;
+  bars.forEach(function(c){
+    var slots = barBeats(c) * 2;
+    if (prev) rampDown(prev, cursor - 0.01);
     var voices = [];
-    for (var s = 0; s < 8; s++){
-      if (pat[s] === "-") continue;
-      voices = voices.concat(strum(pat[s], c, barStart + s * slotDur, s === 0 || s === 4));
+    for (var s = 0; s < slots; s++){
+      var beat = (patAt + s) % 8;
+      if (pat[beat] === "-") continue;
+      voices = voices.concat(strum(pat[beat], c, cursor + s * slotDur, beat === 0 || beat === 4));
     }
     prev = voices;
+    cursor += slots * slotDur;
+    patAt = (patAt + slots) % 8;
   });
 }
 
 function useProg(p){
   state.bars = progBars(p).map(function(c){
-    return {root: mod12(state.key.root + c.root), quality: c.quality};
+    return {root: mod12(state.key.root + c.root), quality: c.quality, beats: 4};
   });
   state.key.mode = p[1];
   state.bpm = p[3];
@@ -1846,14 +1905,15 @@ function renderMoodContext(){
 
   var prof = currentProfile();
   if (!prof){
-    box.appendChild(el("p", "empty", "Add some bars and this will find progressions in the same character."));
+    box.appendChild(el("p", "empty", "Add some chords and this will find progressions in the same character."));
     return;
   }
 
   box.appendChild(el("p", "lab", "Based on what you are playing"));
 
-  var facts = state.bars.length + (state.bars.length === 1 ? " bar" : " bars") +
-    " \u00b7 " + state.key.mode + " \u00b7 " + state.bpm + " bpm \u00b7 " + patternName();
+  var facts = state.bars.length + (state.bars.length === 1 ? " chord" : " chords") +
+    " \u00b7 " + totalBeats() + " beats \u00b7 " + state.key.mode +
+    " \u00b7 " + state.bpm + " bpm \u00b7 " + patternName();
   var line = el("p", "ctx-line");
   line.innerHTML = esc(facts) + (prof.name ? ' \u00b7 <b>' + esc(prof.name) + '</b>' : "") +
     '<br>reads as <b>' + esc(topTags(prof.tags, 3).join(", ")) + '</b>';
@@ -1931,7 +1991,8 @@ function renderMoodTab(){
 
 /* ============================ actions ============================ */
 function addBar(){
-  state.bars.push({root: state.pick.root, quality: state.pick.quality});
+  var last = state.bars[state.bars.length - 1];
+  state.bars.push({root: state.pick.root, quality: state.pick.quality, beats: last ? barBeats(last) : 4});
   state.sel = state.bars.length - 1;
   preview(state.pick);
   refresh();
@@ -1946,7 +2007,7 @@ function showTab(name){
 }
 
 function transpose(by){
-  state.bars = state.bars.map(function(c){ return {root: mod12(c.root + by), quality: c.quality}; });
+  state.bars = state.bars.map(function(c){ return {root: mod12(c.root + by), quality: c.quality, beats: barBeats(c)}; });
   state.key.root = mod12(state.key.root + by);
   state.pick.root = mod12(state.pick.root + by);
   syncControls(); refresh();
@@ -1956,7 +2017,10 @@ function transpose(by){
 function encodeState(){
   return ["1", state.bpm, state.key.root, state.key.mode, state.swing,
     state.pattern.join(""),
-    state.bars.map(function(c){ return c.root + "." + c.quality; }).join(",")].join("|");
+    state.bars.map(function(c){
+      var b = barBeats(c);
+      return c.root + "." + c.quality + (b === 4 ? "" : "." + b);
+    }).join(",")].join("|");
 }
 function decodeState(str){
   var p = str.split("|");
@@ -1972,7 +2036,8 @@ function decodeState(str){
   state.bars = (p[6] || "").split(",").filter(Boolean).map(function(t){
     var q = t.split("."), r = parseInt(q[0], 10);
     if (!(r >= 0 && r < 12) || !SUFFIX.hasOwnProperty(q[1])) return null;
-    return {root: r, quality: q[1]};
+    var b = q.length > 2 ? parseInt(q[2], 10) : 4;
+    return {root: r, quality: q[1], beats: (b >= 1 && b <= 8) ? b : 4};
   }).filter(Boolean);
   return true;
 }
@@ -2004,7 +2069,7 @@ function wire(){
   $("#btnAdd").onclick = addBar;
   $("#btnReplace").onclick = function(){
     if (!state.bars.length) return;
-    state.bars[state.sel] = {root: state.pick.root, quality: state.pick.quality};
+    state.bars[state.sel] = {root: state.pick.root, quality: state.pick.quality, beats: barBeats(state.bars[state.sel])};
     preview(state.pick); refresh();
   };
 
@@ -2023,7 +2088,7 @@ function wire(){
 
   $("#btnSave").onclick = function(){
     var name = ($("#saveName").value || "").trim();
-    if (!state.bars.length){ $("#saveName").placeholder = "Add some bars first"; return; }
+    if (!state.bars.length){ $("#saveName").placeholder = "Add some chords first"; return; }
     if (!name) name = state.bars.map(function(c){ return chordName(c); }).slice(0, 4).join(" ");
     var songs = load(STORE, []);
     songs.unshift({name: name, bars: state.bars, pattern: state.pattern, bpm: state.bpm, key: state.key});
@@ -2061,7 +2126,8 @@ function init(){
     try { seeded = decodeState(decodeURIComponent(hash.slice(2))); } catch(e){ seeded = false; }
   }
   if (!seeded){
-    state.bars = [{root:0,quality:"maj"},{root:7,quality:"maj"},{root:9,quality:"min"},{root:5,quality:"maj"}];
+    state.bars = [{root:0,quality:"maj",beats:4},{root:7,quality:"maj",beats:4},
+                  {root:9,quality:"min",beats:4},{root:5,quality:"maj",beats:4}];
   }
   wire();
   syncControls();
