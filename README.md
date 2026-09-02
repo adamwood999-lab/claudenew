@@ -29,9 +29,12 @@ synthesised acoustic guitar. No accounts, no server, no data leaves the device.
   its strumming pattern, then offers neighbours — or nudges: darker, jazzier,
   calmer, heavier, weirder, dreamier and so on. Typing "more like this, but
   sadder" does the same thing.
-- **Key awareness** — pick a key and the seven diatonic chords appear as
-  one-tap buttons. Every bar is labelled with its roman numeral, so the shape of
-  the progression is readable at a glance.
+- **Key and mode** — pick a key and any of the seven modes: Ionian (major),
+  Dorian, Phrygian, Lydian, Mixolydian, Aeolian (minor) and Locrian. The seven
+  diatonic chords of that mode appear as one-tap buttons with their roman
+  numerals, the chord that gives the mode its character is ringed, and a line
+  explains what to listen for. Every bar in the progression is labelled with its
+  numeral, so the shape is readable at a glance.
 - **Chord lengths** — each chord lasts anywhere from one to eight beats. Select
   it and use the stepper to shorten or extend; the card's width and its row of
   beat pips show how long it holds, and a running total gives the length of the
@@ -68,6 +71,18 @@ at `https://adamwood999-lab.github.io/claudenew/` within a minute or two, and
 updates on every push.
 
 ## Notes on the music
+
+Roman numerals stay relative to the parallel major throughout — bIII, bVII and
+so on — which is the usual convention for modal analysis and keeps one reading
+consistent across all seven modes. The one context-dependent spelling is the
+tritone degree, written #iv in Lydian, where it is a raised fourth, and bV
+everywhere else.
+
+A progression's mode records what it is centred on, not that every chord is
+diatonic to it. Several of the best ones borrow deliberately: the minor iv in
+Gospel Amen, the bVI-bVII lift in Stadium Lift, the major III and minor iv in
+The Slip.
+
 
 Relative search is deliberately not pure mood matching. A bright progression
 shares no mood tags at all with a dark one, so asking for "the same thing but

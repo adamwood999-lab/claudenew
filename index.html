@@ -66,8 +66,15 @@ button,select,input{font-family:inherit;color:inherit}
 .app{max-width:780px;margin:0 auto;padding:0 14px}
 
 /* ---------- header ---------- */
-.head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 12px}
-.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 auto}
+.brand h1,.brand .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* mode names are long, so give the key controls their own row on a phone */
+@media (max-width:540px){
+  .head{flex-direction:column;align-items:stretch;gap:9px;padding-bottom:10px}
+  .keysel{justify-content:flex-start}
+  .keysel select{flex:1;max-width:none}
+}
 .brand svg{display:block;flex:none}
 h1{
   font-family:var(--f-disp); font-size:22px; line-height:1; margin:0;
@@ -75,7 +82,7 @@ h1{
   letter-spacing:.01em; text-transform:uppercase;
 }
 .sub{margin:3px 0 0;font-size:11px;color:var(--ink3);font-family:var(--f-mono);letter-spacing:.06em;text-transform:uppercase}
-.keysel{display:flex;align-items:center;gap:6px;flex:none}
+.keysel{display:flex;align-items:center;gap:6px;flex:0 0 auto;margin-left:auto}
 .keysel .lab{font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
 select{
   background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
@@ -146,6 +153,10 @@ select{
   padding:7px 9px;font-size:13px;font-weight:600;cursor:pointer;min-width:34px;
 }
 .chip.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.modeNote{font-size:12.5px;line-height:1.5;color:var(--ink2);margin:0 0 9px;max-width:60ch}
+.chip.char{border-color:var(--accent)}
+.chip.char .deg{color:var(--accent)}
+.chip.char.on .deg{color:var(--on-accent);opacity:.85}
 .chip .deg{font-family:var(--f-mono);font-size:9px;color:var(--ink3);display:block;letter-spacing:.06em}
 .chip.on .deg{color:var(--on-accent);opacity:.75}
 
@@ -289,10 +300,7 @@ input[type=text]{
     <div class="keysel">
       <span class="lab" style="margin:0">Key</span>
       <select id="keyRoot" aria-label="Key root"></select>
-      <select id="keyMode" aria-label="Key mode">
-        <option value="major">major</option>
-        <option value="minor">minor</option>
-      </select>
+      <select id="keyMode" aria-label="Mode"></select>
     </div>
   </header>
 
@@ -326,6 +334,7 @@ input[type=text]{
 
   <section class="panel" id="p-chords" role="tabpanel" aria-labelledby="tab-chords">
     <p class="lab">In the key of <span id="keyName">C major</span></p>
+    <p class="modeNote" id="modeNote"></p>
     <div class="chips" id="diatonic"></div>
     <p class="lab">Root</p>
     <div class="chips" id="roots"></div>
@@ -464,11 +473,35 @@ var OPEN_VOICINGS = {
   "7|6":[3,2,0,0,0,0], "7|sus4":[3,3,0,0,1,3]
 };
 
-var DIATONIC = {
-  major:[[0,"maj","I"],[2,"min","ii"],[4,"min","iii"],[5,"maj","IV"],[7,"maj","V"],[9,"min","vi"],[11,"dim","vii°"]],
-  minor:[[0,"min","i"],[2,"dim","ii°"],[3,"maj","III"],[5,"min","iv"],[7,"min","v"],[8,"maj","VI"],[10,"maj","VII"]]
+/* ============================ modes ============================
+   Numerals stay relative to the parallel major throughout (bIII, bVII and so
+   on), which is the usual convention for modal analysis and keeps one reading
+   consistent across all seven. */
+var MODES = {
+  ionian:     {label:"major",      deg:[0,2,4,5,7,9,11], q:["maj","min","min","maj","maj","min","dim"], sig:-1,
+               desc:"The plain major scale. Everything resolves and nothing is borrowed."},
+  dorian:     {label:"Dorian",     deg:[0,2,3,5,7,9,10], q:["min","min","maj","maj","min","dim","maj"], sig:3,
+               desc:"Minor, but with a bright major IV. Celtic tunes, Santana, most modal funk."},
+  phrygian:   {label:"Phrygian",   deg:[0,1,3,5,7,8,10], q:["min","maj","maj","min","dim","maj","min"], sig:1,
+               desc:"Minor with a flat second. That one semitone above the tonic is the whole sound — Spanish, and most metal menace."},
+  lydian:     {label:"Lydian",     deg:[0,2,4,6,7,9,11], q:["maj","maj","min","dim","maj","min","min"], sig:1,
+               desc:"Major with a raised fourth, which turns the II chord major. Weightless, and the reason film scores sound like wonder."},
+  mixolydian: {label:"Mixolydian", deg:[0,2,4,5,7,9,10], q:["maj","min","dim","maj","min","min","maj"], sig:6,
+               desc:"Major with a flat seventh. The bVII is why rock and country read as rural rather than classical."},
+  aeolian:    {label:"minor",      deg:[0,2,3,5,7,8,10], q:["min","dim","maj","min","min","maj","maj"], sig:5,
+               desc:"The natural minor scale. Sad by default, and the home of most minor-key pop."},
+  locrian:    {label:"Locrian",    deg:[0,1,3,5,6,8,10], q:["dim","maj","min","min","maj","maj","min"], sig:4,
+               desc:"A diminished tonic and a flat fifth. Barely usable as a key, which is exactly why it unsettles."}
 };
+var MODE_ORDER = ["ionian","dorian","phrygian","lydian","mixolydian","aeolian","locrian"];
 
+function normalizeMode(m){
+  if (m === "major") return "ionian";
+  if (m === "minor") return "aeolian";
+  return MODES[m] ? m : "ionian";
+}
+function modeLabel(m){ return MODES[normalizeMode(m)].label; }
+function keyLabel(key){ return NAMES[key.root] + " " + modeLabel(key.mode); }
 var PATTERNS = [
   ["All down",   ["D","-","D","-","D","-","D","-"]],
   ["Campfire",   ["D","-","D","U","-","U","D","U"]],
@@ -535,7 +568,8 @@ var ROMAN = ["I","bII","II","bIII","III","IV","bV","V","bVI","VI","bVII","VII"];
 var MINORISH = {min:1, m7:1, m6:1, m9:1, m7b5:1, dim:1, dim7:1};
 function romanFor(c, key){
   var iv = mod12(c.root - key.root);
-  var num = ROMAN[iv];
+  /* the tritone degree is a raised fourth in Lydian and a flat fifth everywhere else */
+  var num = (iv === 6 && normalizeMode(key.mode) === "lydian") ? "#IV" : ROMAN[iv];
   if (MINORISH[c.quality]) num = num.toLowerCase();
   var tail = {min:"", m7:"7", m6:"6", m9:"9", m7b5:"\u00f87", dim:"\u00b0", dim7:"\u00b07", maj:""}[c.quality];
   if (tail === undefined) tail = SUFFIX[c.quality];
@@ -754,6 +788,14 @@ var VOCAB = [
 ["confident cocky assured bold+statement self+assured",{defiant:2,groovy:2,triumphant:1}],
 ["awkward uncomfortable cringe stilted",{tense:2,quirky:2}],
 ["overcoming struggle perseverance rising+up comeback redemption",{triumphant:3,heroic:2,hopeful:2}],
+["dorian",{folky:2,groovy:2,mysterious:1,chilled:1}],
+["phrygian",{exotic:3,dark:2,ominous:2}],
+["lydian",{dreamy:3,floating:3,cinematic:2}],
+["mixolydian",{rustic:2,warm:2,driving:2}],
+["aeolian",{melancholy:3,dark:1}],
+["locrian",{tense:3,eerie:2,unresolved:3}],
+["ionian",{warm:2,uplifting:2}],
+["modal",{folky:2,hypnotic:2}],
 ["beautiful pretty lovely gorgeous stunning elegant graceful",{tender:2,lush:2,romantic:1,peaceful:1}],
 ["sunday lazy lazy+sunday afternoon slow+day day+off weekend",{chilled:3,peaceful:2,warm:1}],
 ["workout gym training exercise pumped hype hyped psyched",{energetic:3,driving:3,triumphant:1}],
@@ -816,7 +858,7 @@ var PROGS = [
 ["Andalusian Cadence","minor","0:m,10:M,8:M,7:M",96,1,{dramatic:3,exotic:3,dark:2,epic:2},"The flamenco staircase, walking down to a major V that pulls hard back to the top. Old, and still the most dramatic four chords on the instrument."],
 ["Elegy","minor","0:m,5:m,10:M,3:M",60,8,{sad:3,weary:2,sacred:1,melancholy:3},"A minor circle of fifths — each chord falls into the next, so it feels like gravity rather than choice."],
 ["The Long Winter","minor","0:m,8:M,5:m,7:M",68,8,{melancholy:3,lonely:3,wistful:2,sparse:1},"The major V at the end is the only warmth in it, and it arrives too late to change anything."],
-["Ghost Light","minor","0:m,1:M,0:m,1:M",70,0,{eerie:3,ominous:3,mysterious:3,exotic:2},"A Phrygian half-step above the tonic. That one semitone is the whole trick — it sounds wrong in a way you can't place."],
+["Ghost Light","phrygian","0:m,1:M,0:m,1:M",70,0,{eerie:3,ominous:3,mysterious:3,exotic:2},"A Phrygian half-step above the tonic. That one semitone is the whole trick — it sounds wrong in a way you can't place."],
 ["Under the Floorboards","minor","0:m,6:d,0:m,7:M",66,0,{eerie:3,tense:3,ominous:2},"A diminished chord sitting a tritone from home. Maximum unease with minimum movement."],
 ["Siege","minor","0:m,8:M,10:M,0:m",132,3,{epic:3,driving:3,heroic:2,cinematic:2},"Rises through VI and VII and slams back onto the tonic. The standard-issue 'the army is coming' loop."],
 ["Boss Fight","minor","0:5,1:5,0:5,10:5",150,3,{aggressive:3,tense:3,urgent:3,epic:2,futuristic:1},"Power chords a semitone apart, fast. No thirds, so it reads as threat rather than sadness."],
@@ -826,7 +868,7 @@ var PROGS = [
 ["Minor Blues","minor","0:m7,5:m7,0:m7,7:7",84,6,{bluesy:3,soulful:2,gritty:2,weary:2},"A twelve-bar shape squeezed into four, in minor. The major V7 at the end is the bit that hurts."],
 ["Wellerman","minor","0:m,3:M,10:M,0:m",112,0,{folky:3,rustic:3,defiant:1,energetic:2},"Modal, sturdy and built for a room full of people who don't know the words yet."],
 ["Celtic Air","minor","0:m,10:M,5:m,10:M",88,8,{folky:3,wistful:3,rustic:2,melancholy:2},"Never touches the fifth, so it floats between minor and Dorian — the sound of most traditional laments."],
-["Dorian Vamp","minor","0:m7,5:7",100,5,{groovy:3,jazzy:2,hypnotic:2,chilled:2},"Two chords forever. The major IV against a minor tonic is what makes it cool rather than sad."],
+["Dorian Vamp","dorian","0:m7,5:7",100,5,{groovy:3,jazzy:2,hypnotic:2,chilled:2},"Two chords forever. The major IV against a minor tonic is what makes it cool rather than sad."],
 ["After Hours","minor","0:m9,5:m9",84,8,{mysterious:3,sensual:2,jazzy:2,dark:2},"Minor ninths, no resolution, a lot of room. Smoke and a late licence."],
 ["Tango","minor","0:m,5:m,7:7,0:m",116,0,{dramatic:3,sensual:3,exotic:2},"Minor tonic, minor iv, then a major dominant that snaps it shut. Formal and a bit dangerous."],
 ["Requiem","minor","0:m,5:m,10:M,3:M,8:M,2:d,7:7,0:m",64,8,{sacred:3,sad:3,dramatic:2,cinematic:2},"The full minor circle of fifths, every chord falling into the next until it finally comes home."],
@@ -850,11 +892,11 @@ var PROGS = [
 ["Gospel Amen","major","0:M,0:7,5:M,5:m,0:M",72,0,{sacred:3,soulful:3,bittersweet:2,warm:2},"The borrowed minor iv on the way home is the single most reliable lump-in-throat chord in Western music."],
 ["Soul Riser","major","0:M7,4:m7,5:M,7:M",96,2,{soulful:3,uplifting:2,warm:3},"Climbs by step from the tonic. Feels like standing up."],
 ["Motown","major","0:M,5:M,2:m,7:M",124,2,{groovy:3,joyful:2,retro:2,energetic:2},"Major, minor, major, and straight back round. Built for a rhythm section to push against."],
-["Funk Two","major","0:7,5:7",104,6,{groovy:3,gritty:2,energetic:2,sensual:1},"Two dominant sevenths. Harmonically almost nothing, which is the point — the groove is the song."],
+["Funk Two","mixolydian","0:7,5:7",104,6,{groovy:3,gritty:2,energetic:2,sensual:1},"Two dominant sevenths. Harmonically almost nothing, which is the point — the groove is the song."],
 ["Mirrorball","major","9:m7,2:m7,7:7",122,6,{groovy:3,joyful:2,retro:2,energetic:3},"Minor sevenths falling into a dominant, over and over. Disco's engine room."],
 ["Twelve-Bar Blues","major","0:7,0:7,0:7,0:7,5:7,5:7,0:7,0:7,7:7,5:7,0:7,7:7",92,4,{bluesy:3,gritty:2,rustic:2,weary:1},"Everything is a dominant seventh, so nothing is ever fully at rest. Twelve bars, a hundred years, no sign of stopping."],
-["Country Road","major","0:M,10:M,5:M,0:M",112,4,{rustic:3,warm:3,folky:2,nostalgic:2},"The flat seventh borrowed from Mixolydian — instantly rural, instantly unhurried."],
-["Highway","major","0:M,10:M,5:M,5:M",128,3,{driving:3,warm:2,energetic:2,defiant:1},"Same borrowed chord, faster, sitting on the IV instead of going home. Motion without arrival."],
+["Country Road","mixolydian","0:M,10:M,5:M,0:M",112,4,{rustic:3,warm:3,folky:2,nostalgic:2},"The flat seventh borrowed from Mixolydian — instantly rural, instantly unhurried."],
+["Highway","mixolydian","0:M,10:M,5:M,5:M",128,3,{driving:3,warm:2,energetic:2,defiant:1},"Same borrowed chord, faster, sitting on the IV instead of going home. Motion without arrival."],
 ["Stadium Lift","major","8:M,10:M,0:M,0:M",104,0,{triumphant:3,heroic:3,epic:3,uplifting:2},"Two borrowed chords climbing into the tonic. If a film needs the hero to stand up, this is playing."],
 ["Fanfare","major","0:M,5:M,10:M,0:M",100,0,{heroic:3,epic:2,cinematic:2,triumphant:2},"Bright, wide and slightly archaic. Coronations and end credits."],
 ["Royal Road","major","5:M7,7:7,4:m7,9:m",128,2,{bittersweet:3,dramatic:2,uplifting:2,cinematic:2},"The backbone of J-pop and anime themes. Starts away from home and lands on the minor — hopeful and sad in the same four bars."],
@@ -884,6 +926,9 @@ var PROGS = [
 ["Storm Front","minor","0:m,8:M,10:M,5:m",100,3,{epic:3,cinematic:3,dramatic:3},"The big minor loop with the iv held back until the last bar, so the tension keeps building past where you expect it to break."],
 ["Dread","minor","0:d7,0:m",56,0,{eerie:3,tense:3,ominous:3,sparse:2},"A diminished seventh resolving to the tonic, as slowly as you can stand. Every horror score does this."],
 ["Suspense Ladder","minor","0:m,1:M,3:M,8:M",100,0,{tense:3,mysterious:2,ominous:2,cinematic:2},"Climbs by uneven steps through chords that don't belong together. You can't predict the next one, which is the effect."],
+["Dorian Folk","dorian","0:m,5:M,0:m,10:M",100,1,{folky:3,wistful:2,rustic:2,mysterious:1},"A major IV against a minor tonic — that is the whole of Dorian. Scarborough Fair and half the English folk canon sit here."],
+["Lydian Lift","lydian","0:M7,2:M,0:M7,2:M",84,8,{dreamy:3,floating:3,cinematic:2,hopeful:2},"A major II where a minor one belongs, courtesy of the raised fourth. Weightless: the sound of something wonderful about to happen."],
+["Locrian Drift","locrian","0:h,1:M,0:h,10:m",92,0,{tense:3,unresolved:3,eerie:2,mysterious:2},"Built on a half-diminished tonic, so home is itself unstable. Almost nobody writes in Locrian, which is exactly why it never settles."],
 ["Drone","minor","0:s2,10:s2",58,8,{peaceful:3,hypnotic:3,sparse:3,floating:2},"Two suspended chords, no thirds anywhere. Barely a progression at all."]
 ];
 
@@ -1456,7 +1501,7 @@ function initMidi(){
 /* ============================ state ============================ */
 var state = {
   bpm: 96,
-  key: {root: 0, mode: "major"},
+  key: {root: 0, mode: "ionian"},
   bars: [],
   pattern: PATTERNS[1][1].slice(),
   swing: 0,
@@ -1679,10 +1724,23 @@ function setBeats(i, n){
 function renderDiatonic(){
   var box = $("#diatonic");
   box.innerHTML = "";
-  $("#keyName").textContent = NAMES[state.key.root] + " " + state.key.mode;
-  DIATONIC[state.key.mode].forEach(function(d){
-    var c = {root: mod12(state.key.root + d[0]), quality: d[1]};
-    var b = el("button", "chip", esc(chordName(c)) + '<span class="deg">' + esc(d[2]) + "</span>");
+  var m = normalizeMode(state.key.mode);
+  var mode = MODES[m];
+  $("#keyName").textContent = keyLabel(state.key);
+
+  var note = mode.desc;
+  if (mode.sig >= 0){
+    var sc = {root: mod12(state.key.root + mode.deg[mode.sig]), quality: mode.q[mode.sig]};
+    note += " Its signature chord here is " + chordName(sc) + " (" + romanFor(sc, state.key) + ").";
+  }
+  $("#modeNote").textContent = note;
+
+  mode.deg.forEach(function(dg, i){
+    var c = {root: mod12(state.key.root + dg), quality: mode.q[i]};
+    var isSig = (i === mode.sig);
+    var b = el("button", "chip" + (isSig ? " char" : ""),
+      esc(chordName(c)) + '<span class="deg">' + esc(romanFor(c, state.key)) + "</span>");
+    if (isSig) b.title = "The chord that makes this sound like " + mode.label;
     b.onclick = function(){
       state.pick = {root:c.root, quality:c.quality};
       var last = state.bars[state.bars.length - 1];
@@ -1692,6 +1750,12 @@ function renderDiatonic(){
     };
     box.appendChild(b);
   });
+}
+
+function renderModeOptions(){
+  $("#keyMode").innerHTML = MODE_ORDER.map(function(m){
+    return '<option value="' + m + '">' + MODES[m].label + "</option>";
+  }).join("");
 }
 
 function renderPicker(){
@@ -1774,7 +1838,7 @@ function renderSaved(){
       state.bars = s.bars.map(function(c){ return {root:c.root, quality:c.quality, beats: barBeats(c)}; });
       if (s.pattern) state.pattern = s.pattern.slice();
       if (s.bpm) state.bpm = s.bpm;
-      if (s.key) state.key = {root:s.key.root, mode:s.key.mode};
+      if (s.key) state.key = {root:s.key.root, mode:normalizeMode(s.key.mode)};
       state.sel = 0; syncControls(); refresh();
     };
     var del = el("button", "btn ghost danger", "✕");
@@ -1798,7 +1862,7 @@ function progChordNames(p){
   var mode = p[1];
   return progBars(p).map(function(c){
     var abs = {root: mod12(state.key.root + c.root), quality: c.quality};
-    return {name: chordName(abs), rn: romanFor(abs, {root: state.key.root, mode: mode})};
+    return {name: chordName(abs), rn: romanFor(abs, {root: state.key.root, mode: normalizeMode(mode)})};
   });
 }
 
@@ -1834,7 +1898,7 @@ function useProg(p){
   state.bars = progBars(p).map(function(c){
     return {root: mod12(state.key.root + c.root), quality: c.quality, beats: 4};
   });
-  state.key.mode = p[1];
+  state.key.mode = normalizeMode(p[1]);
   state.bpm = p[3];
   state.pattern = PATTERNS[p[4]][1].slice();
   state.sel = 0;
@@ -1871,7 +1935,7 @@ function renderMoodResults(res, query){
 
     var top = el("div", "res-top");
     top.innerHTML = '<span class="res-name">' + esc(p[0]) + '</span>' +
-      '<span class="res-mode">' + esc(p[1]) + ' &middot; ' + p[3] + ' bpm &middot; ' + esc(PATTERNS[p[4]][0]) + '</span>';
+      '<span class="res-mode">' + esc(modeLabel(p[1])) + ' &middot; ' + p[3] + ' bpm &middot; ' + esc(PATTERNS[p[4]][0]) + '</span>';
     card.appendChild(top);
 
     var bars = el("div", "res-bars");
@@ -1912,7 +1976,7 @@ function renderMoodContext(){
   box.appendChild(el("p", "lab", "Based on what you are playing"));
 
   var facts = state.bars.length + (state.bars.length === 1 ? " chord" : " chords") +
-    " \u00b7 " + totalBeats() + " beats \u00b7 " + state.key.mode +
+    " \u00b7 " + totalBeats() + " beats \u00b7 " + modeLabel(state.key.mode) +
     " \u00b7 " + state.bpm + " bpm \u00b7 " + patternName();
   var line = el("p", "ctx-line");
   line.innerHTML = esc(facts) + (prof.name ? ' \u00b7 <b>' + esc(prof.name) + '</b>' : "") +
@@ -2029,7 +2093,7 @@ function decodeState(str){
   if (bpm >= 40 && bpm <= 220) state.bpm = bpm;
   var kr = parseInt(p[2], 10);
   if (kr >= 0 && kr < 12) state.key.root = kr;
-  if (p[3] === "major" || p[3] === "minor") state.key.mode = p[3];
+  if (p[3]) state.key.mode = normalizeMode(p[3]);
   var sw = parseInt(p[4], 10);
   if (sw >= 0 && sw <= 100) state.swing = sw;
   if (p[5] && p[5].length === 8 && /^[-DUXBC]{8}$/.test(p[5])) state.pattern = p[5].split("");
@@ -2046,7 +2110,7 @@ function decodeState(str){
 function syncControls(){
   $("#bpmVal").textContent = state.bpm;
   $("#keyRoot").value = state.key.root;
-  $("#keyMode").value = state.key.mode;
+  $("#keyMode").value = normalizeMode(state.key.mode);
   $("#swing").value = state.swing;
   $("#swingVal").textContent = state.swing === 0 ? "straight" : state.swing + "%";
   $("#tone").value = state.tone;
@@ -2061,7 +2125,7 @@ function wire(){
   $("#keyRoot").innerHTML = NAMES.map(function(n, i){ return '<option value="' + i + '">' + n + "</option>"; }).join("");
 
   $("#keyRoot").onchange = function(){ state.key.root = +this.value; renderDiatonic(); renderStrip(); };
-  $("#keyMode").onchange = function(){ state.key.mode = this.value; renderDiatonic(); renderStrip(); };
+  $("#keyMode").onchange = function(){ state.key.mode = normalizeMode(this.value); refresh(); };
 
   ["mood","chords","strum","songs"].forEach(function(n){ $("#tab-" + n).onclick = function(){ showTab(n); }; });
 
@@ -2131,6 +2195,7 @@ function init(){
   }
   wire();
   syncControls();
+  renderModeOptions();
   renderPicker();
   renderPatterns();
   renderGrid();
