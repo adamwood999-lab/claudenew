@@ -157,7 +157,7 @@ select{
 .chip.char{border-color:var(--accent)}
 .chip.char .deg{color:var(--accent)}
 .chip.char.on .deg{color:var(--on-accent);opacity:.85}
-.chip .deg{font-family:var(--f-mono);font-size:9px;color:var(--ink3);display:block;letter-spacing:.06em}
+.chip .deg{font-family:var(--f-mono);font-size:9px;color:var(--ink3);display:block;letter-spacing:.06em;margin-top:1px}
 .chip.on .deg{color:var(--on-accent);opacity:.75}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
@@ -376,7 +376,9 @@ input[type=text]{
   </section>
 
   <section class="panel" id="p-songs" role="tabpanel" aria-labelledby="tab-songs" hidden>
-    <p class="lab">Start from a classic</p>
+    <p class="lab">In <span id="modeKeyName">C major</span></p>
+    <div class="chips" id="modePresets"></div>
+    <p class="lab">Start from a classic &mdash; each sets its own mode</p>
     <div class="chips" id="presets"></div>
     <p class="lab">Transpose</p>
     <div class="row">
@@ -428,7 +430,11 @@ input[type=text]{
 "use strict";
 
 /* ============================ music constants ============================ */
-var NAMES = ["C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B"];
+var NAMES       = ["C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B"];
+var NAMES_SHARP = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+var NAMES_FLAT  = ["C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B"];
+var MAJOR_STEPS = [0,2,4,5,7,9,11];
+var FLAT_MAJORS = {5:1, 10:1, 3:1, 8:1, 1:1, 6:1};   /* F Bb Eb Ab Db Gb */
 var OPEN  = [40,45,50,55,59,64];           /* string 6 -> 1, low to high */
 
 var QUALS = [
@@ -501,7 +507,7 @@ function normalizeMode(m){
   return MODES[m] ? m : "ionian";
 }
 function modeLabel(m){ return MODES[normalizeMode(m)].label; }
-function keyLabel(key){ return NAMES[key.root] + " " + modeLabel(key.mode); }
+function keyLabel(key){ return noteName(key.root, key) + " " + modeLabel(key.mode); }
 var PATTERNS = [
   ["All down",   ["D","-","D","-","D","-","D","-"]],
   ["Campfire",   ["D","-","D","U","-","U","D","U"]],
@@ -515,21 +521,48 @@ var PATTERNS = [
 ];
 
 /* degree, quality — rendered into the current key */
+/* Each classic belongs to a mode, and choosing one switches to it — otherwise
+   the chords and the mode on screen would contradict each other. Degrees are
+   measured from the progression's own tonic. */
 var PRESETS = [
-  ["I–V–vi–IV",   [[0,"maj"],[7,"maj"],[9,"min"],[5,"maj"]]],
-  ["vi–IV–I–V",   [[9,"min"],[5,"maj"],[0,"maj"],[7,"maj"]]],
-  ["Fifties",     [[0,"maj"],[9,"min"],[5,"maj"],[7,"maj"]]],
-  ["ii–V–I",      [[2,"m7"],[7,"7"],[0,"maj7"],[0,"maj7"]]],
-  ["12-bar blues",[[0,"7"],[0,"7"],[0,"7"],[0,"7"],[5,"7"],[5,"7"],[0,"7"],[0,"7"],[7,"7"],[5,"7"],[0,"7"],[7,"7"]]],
-  ["Andalusian",  [[9,"min"],[7,"maj"],[5,"maj"],[4,"maj"]]],
-  ["Canon",       [[0,"maj"],[7,"maj"],[9,"min"],[4,"min"],[5,"maj"],[0,"maj"],[5,"maj"],[7,"maj"]]],
-  ["Grunge",      [[0,"5"],[5,"5"],[10,"5"],[5,"5"]]]
+  ["I–V–vi–IV",   "ionian",     [[0,"maj"],[7,"maj"],[9,"min"],[5,"maj"]]],
+  ["vi–IV–I–V",   "ionian",     [[9,"min"],[5,"maj"],[0,"maj"],[7,"maj"]]],
+  ["Fifties",     "ionian",     [[0,"maj"],[9,"min"],[5,"maj"],[7,"maj"]]],
+  ["ii–V–I",      "ionian",     [[2,"m7"],[7,"7"],[0,"maj7"],[0,"maj7"]]],
+  ["12-bar blues","ionian",     [[0,"7"],[0,"7"],[0,"7"],[0,"7"],[5,"7"],[5,"7"],[0,"7"],[0,"7"],[7,"7"],[5,"7"],[0,"7"],[7,"7"]]],
+  ["Andalusian",  "aeolian",    [[0,"min"],[10,"maj"],[8,"maj"],[7,"maj"]]],
+  ["Canon",       "ionian",     [[0,"maj"],[7,"maj"],[9,"min"],[4,"min"],[5,"maj"],[0,"maj"],[5,"maj"],[7,"maj"]]],
+  ["Grunge",      "mixolydian", [[0,"5"],[5,"5"],[10,"5"],[5,"5"]]]
+];
+
+/* Shapes written as steps of whichever scale is selected, so they come out in
+   the mode you are actually in. A shape is skipped when it would land a
+   diminished chord anywhere but the tonic. */
+var MODAL_SHAPES = [
+  [0,4,5,3], [0,5,3,4], [0,3,4,0], [0,6,5,6],
+  [0,3,0,6], [0,1,0,1], [0,2,6,3], [0,5,6,0], [0,3], [0,6]
 ];
 
 /* ============================ chord engine ============================ */
 function mod12(n){ return ((n % 12) + 12) % 12; }
 
-function chordName(c){ return NAMES[c.root] + SUFFIX[c.quality]; }
+/* Which major scale the mode is a rotation of decides whether the key reads in
+   sharps or flats. */
+function parentMajor(key){
+  var r = MODE_ORDER.indexOf(normalizeMode(key.mode));
+  return mod12(key.root - MAJOR_STEPS[r < 0 ? 0 : r]);
+}
+function useFlats(key){ return !!FLAT_MAJORS[parentMajor(key || state.key)]; }
+
+/* A chord is spelled to match the numeral shown beside it, so bVI never reads
+   as a sharp and Lydian's #IV never reads as a flat. */
+function noteName(pc, key){
+  var k = key || state.key;
+  var rn = romanFor({root: pc, quality: "maj"}, k);
+  var flat = rn.charAt(0) === "b" ? true : rn.charAt(0) === "#" ? false : useFlats(k);
+  return (flat ? NAMES_FLAT : NAMES_SHARP)[mod12(pc)];
+}
+function chordName(c, key){ return noteName(c.root, key) + SUFFIX[c.quality]; }
 
 function voicingFor(root, quality){
   var key = root + "|" + quality;
@@ -1760,8 +1793,8 @@ function renderModeOptions(){
 
 function renderPicker(){
   var roots = $("#roots"); roots.innerHTML = "";
-  NAMES.forEach(function(n, i){
-    var b = el("button", "chip" + (i === state.pick.root ? " on" : ""), esc(n));
+  NAMES.forEach(function(ignored, i){
+    var b = el("button", "chip" + (i === state.pick.root ? " on" : ""), esc(noteName(i, state.key)));
     b.onclick = function(){ state.pick.root = i; renderPicker(); renderDiagram(); preview(state.pick); };
     roots.appendChild(b);
   });
@@ -1816,12 +1849,46 @@ function renderGrid(){
 function renderPresets(){
   var box = $("#presets"); box.innerHTML = "";
   PRESETS.forEach(function(p){
-    var b = el("button", "chip", esc(p[0]));
+    var b = el("button", "chip", esc(p[0]) + '<span class="deg">' + esc(MODES[p[1]].label) + "</span>");
     b.onclick = function(){
-      state.bars = p[1].map(function(d){ return {root: mod12(state.key.root + d[0]), quality: d[1]}; });
-      state.sel = 0; refresh();
+      state.key.mode = p[1];
+      state.bars = p[2].map(function(d){
+        return {root: mod12(state.key.root + d[0]), quality: d[1], beats: 4};
+      });
+      state.sel = 0;
+      syncControls();
+      refresh();
     };
     box.appendChild(b);
+  });
+}
+
+function renderModePresets(){
+  var box = $("#modePresets");
+  if (!box) return;
+  box.innerHTML = "";
+  var mode = MODES[normalizeMode(state.key.mode)];
+  $("#modeKeyName").textContent = keyLabel(state.key);
+
+  var shown = 0;
+  MODAL_SHAPES.forEach(function(steps){
+    if (shown >= 6) return;
+    var awkward = steps.some(function(st){ return st !== 0 && mode.q[st] === "dim"; });
+    if (awkward) return;
+
+    var chords = steps.map(function(st){
+      return {root: mod12(state.key.root + mode.deg[st]), quality: mode.q[st], beats: 4};
+    });
+    var b = el("button", "chip",
+      esc(chords.map(function(c){ return romanFor(c, state.key); }).join("\u2013")) +
+      '<span class="deg">' + esc(chords.map(function(c){ return chordName(c); }).join(" ")) + "</span>");
+    b.onclick = function(){
+      state.bars = chords.map(function(c){ return {root: c.root, quality: c.quality, beats: 4}; });
+      state.sel = 0;
+      refresh();
+    };
+    box.appendChild(b);
+    shown++;
   });
 }
 
@@ -1850,7 +1917,8 @@ function renderSaved(){
 }
 
 function refresh(){
-  renderStrip(); renderBarTools(); renderDiatonic(); renderDiagram(); renderMoodContext();
+  renderStrip(); renderBarTools(); renderDiatonic(); renderPicker(); renderDiagram();
+  renderModePresets(); renderMoodContext();
   $("#btnPlay").disabled = !state.bars.length;
 }
 
@@ -1862,7 +1930,8 @@ function progChordNames(p){
   var mode = p[1];
   return progBars(p).map(function(c){
     var abs = {root: mod12(state.key.root + c.root), quality: c.quality};
-    return {name: chordName(abs), rn: romanFor(abs, {root: state.key.root, mode: normalizeMode(mode)})};
+    var k = {root: state.key.root, mode: normalizeMode(mode)};
+    return {name: chordName(abs, k), rn: romanFor(abs, k)};
   });
 }
 
@@ -2107,7 +2176,16 @@ function decodeState(str){
 }
 
 /* ============================ wiring ============================ */
+function renderKeyOptions(){
+  var sel = $("#keyRoot"), cur = state.key.root;
+  sel.innerHTML = NAMES.map(function(ignored, i){
+    return '<option value="' + i + '">' + noteName(i, {root: i, mode: state.key.mode}) + "</option>";
+  }).join("");
+  sel.value = cur;
+}
+
 function syncControls(){
+  renderKeyOptions();
   $("#bpmVal").textContent = state.bpm;
   $("#keyRoot").value = state.key.root;
   $("#keyMode").value = normalizeMode(state.key.mode);
@@ -2122,8 +2200,6 @@ function syncControls(){
 }
 
 function wire(){
-  $("#keyRoot").innerHTML = NAMES.map(function(n, i){ return '<option value="' + i + '">' + n + "</option>"; }).join("");
-
   $("#keyRoot").onchange = function(){ state.key.root = +this.value; renderDiatonic(); renderStrip(); };
   $("#keyMode").onchange = function(){ state.key.mode = normalizeMode(this.value); refresh(); };
 

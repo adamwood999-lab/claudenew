@@ -72,6 +72,12 @@ updates on every push.
 
 ## Notes on the music
 
+Chords are spelled to agree with the numeral beside them, so a bVI reads as Ab
+rather than G#, and Lydian's #IV reads as F# rather than Gb. Where there is no
+numeral to go on — the key selector, the root picker — the spelling follows
+whichever major scale the current mode is a rotation of, so F Phrygian reads in
+flats and F# Dorian in sharps.
+
 Roman numerals stay relative to the parallel major throughout — bIII, bVII and
 so on — which is the usual convention for modal analysis and keeps one reading
 consistent across all seven modes. The one context-dependent spelling is the
